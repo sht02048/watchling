@@ -38,7 +38,7 @@ test("aggregate shows the highest session state in priority order", () => {
     event("UserPromptSubmit", { sessionId: "b" }),
     event("Stop", { sessionId: "b" }),
   );
-  assert.equal(observations.snapshot().state, "done");
+  assert.equal(observations.snapshot().state, "idle");
   feed(observations, event("UserPromptSubmit", { sessionId: "c" }));
   assert.equal(observations.snapshot().state, "working");
   observations.loseIntegrity();
@@ -76,11 +76,11 @@ test("sessions in the same project are independent and short IDs stay distinct",
   assert.deepEqual(
     sessions.map((row) => [row.id, row.project, row.state]),
     [
-      ["sameprefix-A", "project", "done"],
+      ["sameprefix-A", "project", "idle"],
       ["sameprefix-B", "project", "working"],
     ],
   );
-  assert.equal(sessions[0]!.reason, "응답을 마쳤어요.");
+  assert.equal(sessions[0]!.reason, "다음 요청을 기다리고 있어요.");
 });
 
 test("two asks are cleared independently", () => {
@@ -258,7 +258,7 @@ test("an Esc interrupt ends the turn as done", () => {
       isInterrupt: true,
     }),
   );
-  assert.equal(stateOf(observations), "done");
+  assert.equal(stateOf(observations), "idle");
 });
 
 test("a denial without a post event keeps asking until the next prompt", () => {
@@ -290,8 +290,11 @@ test("Stop clears asks and ends the turn", () => {
   );
   assert.equal(stateOf(observations), "asking");
   feed(observations, event("Stop"));
-  assert.equal(stateOf(observations), "done");
-  assert.equal(observations.snapshot().observation, "응답을 마쳤어요.");
+  assert.equal(stateOf(observations), "idle");
+  assert.equal(
+    observations.snapshot().observation,
+    "Claude Code가 다음 요청을 기다리고 있어요.",
+  );
 });
 
 test("integrity loss marks sessions unknown until their own next prompt", () => {
@@ -332,7 +335,7 @@ test("a receiver failure keeps the aggregate unknown", () => {
   assert.equal(observations.snapshot().state, "unknown");
   feed(observations, event("UserPromptSubmit"), event("Stop"));
   assert.equal(observations.snapshot().state, "unknown");
-  assert.equal(stateOf(observations), "done");
+  assert.equal(stateOf(observations), "idle");
   feed(
     observations,
     event("PermissionRequest", { toolName: "Bash", toolUseId: "t1" }),
@@ -340,7 +343,7 @@ test("a receiver failure keeps the aggregate unknown", () => {
   assert.equal(observations.snapshot().state, "asking");
 });
 
-test("subagent activity after Stop keeps the session done", () => {
+test("subagent activity after Stop keeps the session idle", () => {
   const observations = new Observations();
   feed(
     observations,
@@ -355,7 +358,7 @@ test("subagent activity after Stop keeps the session done", () => {
     event("SubagentStart", { agentId: "child" }),
     event("SubagentStop", { agentId: "child" }),
   );
-  assert.equal(stateOf(observations), "done");
+  assert.equal(stateOf(observations), "idle");
   feed(
     observations,
     event("PermissionRequest", { agentId: "child", toolName: "Bash" }),
@@ -367,6 +370,7 @@ test("subagent events fold into their parent session and child lifecycle cannot 
   const observations = new Observations();
   feed(
     observations,
+    event("UserPromptSubmit", { sessionId: "root" }),
     event("SubagentStart", { sessionId: "root", agentId: "child" }),
     event("SessionEnd", { sessionId: "root", agentId: "child" }),
   );
@@ -518,7 +522,7 @@ test("captured permission-host-none trace asks at the request and clears on the 
     "PreToolUse:working",
     "PermissionRequest:asking",
     "PostToolBatch:working",
-    "Stop:done",
+    "Stop:idle",
     "SessionEnd:idle",
   ]);
 });
@@ -562,7 +566,7 @@ test("a permission matching several pending tools stays fingerprint keyed", () =
 test("stop failure ends the turn like stop", () => {
   const observations = new Observations();
   feed(observations, event("UserPromptSubmit"), event("StopFailure"));
-  assert.equal(stateOf(observations), "done");
+  assert.equal(stateOf(observations), "idle");
 });
 
 test("non-interactive permission requests still count as activity", () => {

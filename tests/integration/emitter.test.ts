@@ -479,9 +479,9 @@ test("helper events drive session states through the collector", async () => {
     [
       { ...base, session_id: "pipeline-b", hook_event_name: "Stop" },
       undefined,
-      "done",
+      "idle",
     ],
-    [{ ...base, hook_event_name: "SessionEnd" }, undefined, "done"],
+    [{ ...base, hook_event_name: "SessionEnd" }, undefined, "idle"],
     [
       { ...base, session_id: "pipeline-b", hook_event_name: "SessionEnd" },
       undefined,

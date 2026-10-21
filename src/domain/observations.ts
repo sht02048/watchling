@@ -10,16 +10,14 @@ const MAX_ASKS = 32;
 const MAX_PENDING = 64;
 const MAX_ENDED = 256;
 const reasons: Record<SemanticState, string> = {
-  idle: "세션이 열렸고 아직 요청은 없어요.",
-  done: "응답을 마쳤어요.",
+  idle: "다음 요청을 기다리고 있어요.",
   working: "작업하고 있어요.",
   unknown:
     "놓친 신호가 있어 상태를 확인할 수 없어요. 다음 요청부터 다시 확인해요.",
   asking: "승인이나 질문 응답이 필요해 보여요.",
 };
 const observations: Record<SemanticState, string> = {
-  idle: "열린 세션이 아직 요청을 기다리고 있어요.",
-  done: "응답을 마쳤어요.",
+  idle: "Claude Code가 다음 요청을 기다리고 있어요.",
   working: "Claude Code가 작업하고 있어요.",
   unknown:
     "놓친 신호가 있어 일부 세션의 상태를 확인할 수 없어요. 해당 세션에 다음 요청을 보내면 다시 확인해요.",
@@ -28,7 +26,7 @@ const observations: Record<SemanticState, string> = {
 
 interface Session {
   project: string;
-  base: "idle" | "working" | "done";
+  base: "idle" | "working";
   unknown: boolean;
   idAsks: Set<string>;
   fingerprintAsks: Map<string, number>;
@@ -120,7 +118,7 @@ export class Observations {
     }
     session.project = event.project;
     const activity = (): void => {
-      if (!(event.agentId && session.base === "done")) session.base = "working";
+      if (!(event.agentId && session.base === "idle")) session.base = "working";
     };
     switch (event.eventName) {
       case "UserPromptSubmit":
@@ -170,7 +168,7 @@ export class Observations {
         if (event.eventName === "PostToolUseFailure" && event.isInterrupt) {
           clearAsks(session);
           session.pending.clear();
-          session.base = "done";
+          session.base = "idle";
           break;
         }
         if (event.toolUseId) session.pending.delete(event.toolUseId);
@@ -195,12 +193,9 @@ export class Observations {
       case "Stop":
       case "StopFailure":
         if (event.agentId) break;
-        session.base = "done";
+        session.base = "idle";
         clearAsks(session);
         session.pending.clear();
-        break;
-      case "SubagentStart":
-        if (session.base !== "done") session.base = "working";
         break;
       default:
         break;

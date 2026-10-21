@@ -1,14 +1,7 @@
-export const semanticStates = [
-  "idle",
-  "done",
-  "working",
-  "unknown",
-  "asking",
-] as const;
+export const semanticStates = ["idle", "working", "unknown", "asking"] as const;
 export type SemanticState = (typeof semanticStates)[number];
 export const stateLabels: Record<SemanticState, string> = {
-  idle: "쉬는 중",
-  done: "응답 완료",
+  idle: "Idle",
   working: "작업 중",
   unknown: "확인 불가",
   asking: "확인 요청",

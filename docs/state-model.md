@@ -8,17 +8,16 @@ Comparable projects reach the same limit. Those that know exact wait timing do s
 
 ## States
 
-Displayed priority: `asking > unknown > working > done > idle`. The pet shows the highest state across sessions.
+Displayed priority: `asking > unknown > working > idle`. The pet shows the highest state across sessions.
 
-| State     | Meaning                                          | Enter                                                                                                                                                                              | Leave                                                        |
-| --------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `asking`  | A permission or question prompt is likely shown  | `PermissionRequest` or `Notification` (`permission_prompt`) not marked non-interactive; `PreToolUse` for `AskUserQuestion`                                                         | See [Clearing an ask](#clearing-an-ask)                      |
-| `working` | A turn is in progress                            | `UserPromptSubmit`; main-session `PreToolUse`, `PermissionRequest` and post-tool events; `SubagentStart` before the turn ends                                                      | `Stop`; `StopFailure`; interrupt                             |
-| `done`    | The turn ended and Claude awaits the next prompt | Main-session `Stop` / `StopFailure`; `PostToolUseFailure` with `is_interrupt`                                                                                                      | `UserPromptSubmit`; main-session tool activity; `SessionEnd` |
-| `unknown` | Evidence for this session is broken              | Known transport loss or overflow; a session cap; more than 32 asks; a post-tool fingerprint that matches several fingerprint-only asks; a session first seen mid-turn after a loss | The next `UserPromptSubmit` for that session                 |
-| `idle`    | Nothing to report                                | A new session before any turn; no sessions                                                                                                                                         | Any activity                                                 |
+| State     | Meaning                                               | Enter                                                                                                                                                                              | Leave                                          |
+| --------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `asking`  | A permission or question prompt is likely shown       | `PermissionRequest` or `Notification` (`permission_prompt`) not marked non-interactive; `PreToolUse` for `AskUserQuestion`                                                         | See [Clearing an ask](#clearing-an-ask)        |
+| `working` | A turn is in progress                                 | `UserPromptSubmit`; main-session `PreToolUse`, `PermissionRequest` and post-tool events                                                                                            | `Stop`; `StopFailure`; interrupt               |
+| `unknown` | Evidence for this session is broken                   | Known transport loss or overflow; a session cap; more than 32 asks; a post-tool fingerprint that matches several fingerprint-only asks; a session first seen mid-turn after a loss | The next `UserPromptSubmit` for that session   |
+| `idle`    | Claude awaits the next prompt, or nothing is observed | A new session; main-session `Stop` / `StopFailure`; `PostToolUseFailure` with `is_interrupt`; no sessions                                                                          | `UserPromptSubmit`; main-session tool activity |
 
-Subagent events (`agent_id` present) never move a finished turn back to `working`; background agents can keep running after the main `Stop`. Their asks still count.
+Subagent events (`agent_id` present) never move an `idle` session to `working`; background agents can keep running after the main `Stop`. Their asks still count.
 
 Events that arrive after `SessionEnd` are ignored unless they start a new turn, so late deliveries cannot revive an ended session.
 
@@ -49,4 +48,4 @@ An ask from a `Notification` alone has no key and is cleared by any post-tool ev
 - Input over 64 KiB or 10,000 JSON nodes is not fingerprinted, keeping the helper inside its 150 ms budget. Such a `PermissionRequest` becomes an unkeyed ask, cleared by the next post-tool event in its session.
 - `-p` given as the value of another option is read as non-interactive when the environment does not say otherwise.
 - Two simultaneous prompts with identical tool input collapse into one ask.
-- Plain-prose questions are never inferred; they appear as `done`.
+- Plain-prose questions are never inferred; they appear as `idle`.

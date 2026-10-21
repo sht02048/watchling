@@ -118,7 +118,7 @@ const steps = [
   {
     name: "all turns ended",
     event: { ...session("drive-b"), hook_event_name: "Stop" },
-    expect: "done",
+    expect: "idle",
     sessions: 2,
   },
   {

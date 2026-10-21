@@ -86,7 +86,6 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
       await page.emulateMedia({ reducedMotion: motion });
       for (const state of [
         "idle",
-        "done",
         "working",
         "unknown",
         "asking",
@@ -227,7 +226,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
           id: "fixture-",
           project: "fixture-project",
           state: "idle",
-          reason: "세션이 열렸고 아직 요청은 없어요.",
+          reason: "다음 요청을 기다리고 있어요.",
         },
       ]);
     await expect(sessionPage!.locator("body")).toContainText(
