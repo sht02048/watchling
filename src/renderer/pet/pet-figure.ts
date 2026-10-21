@@ -126,8 +126,8 @@ const lch = (l: number, c: number, h: number): OKLab => [
 ];
 const PALETTE: Record<SemanticState, readonly [OKLab, OKLab]> = {
   idle: [lch(0.88, 0.07, 60), lch(0.74, 0.14, 25)],
-  working: [lch(0.88, 0.07, 215), lch(0.7, 0.12, 255)],
-  asking: [lch(0.92, 0.1, 85), lch(0.76, 0.16, 45)],
+  working: [lch(0.9, 0.11, 90), lch(0.76, 0.16, 55)],
+  asking: [lch(0.86, 0.11, 310), lch(0.66, 0.17, 300)],
   unknown: [lch(0.87, 0.025, 295), lch(0.72, 0.045, 285)],
 };
 const HARMONICS: readonly (readonly [number, number, number, number])[] = [
@@ -348,6 +348,8 @@ export function createPet(canvas: HTMLCanvasElement): {
   const c1 = colorSprings(PALETTE.unknown[0]);
   const c2 = colorSprings(PALETTE.unknown[1]);
   const springs = [...Object.values(params), ...c1, ...c2];
+  const squash = spring(0);
+  let shown: SemanticState = "unknown";
   const figure: Figure = {
     ...initial,
     t: 0,
@@ -373,7 +375,8 @@ export function createPet(canvas: HTMLCanvasElement): {
     const stretch =
       1 +
       figure.breathe * 0.022 * Math.sin(figure.t * 1.7) +
-      figure.pulse * 0.045 * Math.sin(figure.t * 9);
+      figure.pulse * 0.045 * Math.sin(figure.t * 9) +
+      squash.v * 0.12;
     figure.sx /= Math.sqrt(stretch);
     figure.sy *= stretch;
     figure.tilt = figure.sway * 0.1 * Math.sin(figure.t * 0.9);
@@ -410,6 +413,9 @@ export function createPet(canvas: HTMLCanvasElement): {
         s.vel += ((k * (s.target - s.v) - c * s.vel) * dt) / 4;
         s.v += (s.vel * dt) / 4;
       }
+      squash.vel +=
+        ((260 * (squash.target - squash.v) - 14 * squash.vel) * dt) / 4;
+      squash.v += (squash.vel * dt) / 4;
     }
     figure.t += dt;
     figure.phase += params.speed.v * dt;
@@ -428,6 +434,11 @@ export function createPet(canvas: HTMLCanvasElement): {
   return {
     setState(state: SemanticState): void {
       if (destroyed) return;
+      if (state === "working" && shown !== "working") {
+        squash.vel = -0.75;
+        params.field.vel += 1.5;
+      }
+      shown = state;
       for (const key of POSE_KEYS) params[key].target = POSES[state][key];
       for (const channel of COLOR_CHANNELS) {
         c1[channel].target = PALETTE[state][0][channel];
