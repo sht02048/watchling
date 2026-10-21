@@ -129,6 +129,12 @@ export function isClaudeEvent(value: unknown): value is ClaudeEvent {
       !/^[0-9a-f]{32}$/.test(value.inputFingerprint))
   )
     return false;
+  if (
+    "interactive" in value &&
+    value.eventName !== "PermissionRequest" &&
+    value.eventName !== "Notification"
+  )
+    return false;
   for (const field of ["isInterrupt", "stopHookActive", "interactive"]) {
     if (field in value && typeof value[field] !== "boolean") return false;
   }

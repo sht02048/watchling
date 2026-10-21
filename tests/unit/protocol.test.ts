@@ -213,4 +213,13 @@ test("interactivity and input fingerprints are bounded metadata", () => {
     false,
   );
   assert.equal(isClaudeEvent({ ...event, interactive: "true" }), false);
+  assert.equal(
+    isClaudeEvent({
+      eventName: "Stop",
+      sessionId: "session-1",
+      project: "p",
+      interactive: true,
+    }),
+    false,
+  );
 });
