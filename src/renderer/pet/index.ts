@@ -1,5 +1,5 @@
 import { createPet } from "./pet-figure.ts";
-import type { Snapshot } from "../../shared/ui-contract.ts";
+import { stateLabels, type Snapshot } from "../../shared/ui-contract.ts";
 
 const canvas = document.querySelector("canvas");
 if (!canvas) throw new Error("Pet canvas missing");
@@ -10,7 +10,7 @@ function render(snapshot: Snapshot): void {
   pet.setState(snapshot.state);
   canvas!.setAttribute(
     "aria-label",
-    `pagent ${snapshot.state}. 클릭하여 세션 확인`,
+    `pagent ${stateLabels[snapshot.state]}. 클릭하여 세션 확인`,
   );
 }
 const unsubscribeSnapshot = window.pagent.onSnapshot(render);

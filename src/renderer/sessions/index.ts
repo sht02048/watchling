@@ -7,7 +7,7 @@ function render(snapshot: Snapshot): void {
   status!.textContent = snapshot.observation;
   entries!.replaceChildren();
   for (const session of snapshot.sessions.filter(
-    (item) => item.state === "attention" || item.state === "unknown",
+    (item) => item.state === "asking" || item.state === "unknown",
   )) {
     const row = document.createElement("li");
     const label = document.createElement("strong");

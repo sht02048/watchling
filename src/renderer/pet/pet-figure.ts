@@ -89,7 +89,7 @@ const POSES: Record<SemanticState, Pose> = {
     wave: 0.6,
     rot: 0.3,
   },
-  attention: {
+  asking: {
     ...IDLE,
     amp: 0.035,
     speed: 0.8,
@@ -103,6 +103,20 @@ const POSES: Record<SemanticState, Pose> = {
     field: 0.85,
     wave: 0.16,
     rot: 0.08,
+  },
+  done: {
+    ...IDLE,
+    amp: 0.025,
+    speed: 0.45,
+    sx: 1.03,
+    sy: 0.97,
+    eye: 0.35,
+    lookY: 0.15,
+    breathe: 0.9,
+    field: 0.7,
+    wave: 0.05,
+    rot: 0.03,
+    droop: 0.15,
   },
   unknown: {
     ...IDLE,
@@ -127,7 +141,8 @@ const lch = (l: number, c: number, h: number): OKLab => [
 const PALETTE: Record<SemanticState, readonly [OKLab, OKLab]> = {
   idle: [lch(0.88, 0.07, 60), lch(0.74, 0.14, 25)],
   working: [lch(0.88, 0.07, 215), lch(0.7, 0.12, 255)],
-  attention: [lch(0.92, 0.1, 85), lch(0.76, 0.16, 45)],
+  asking: [lch(0.92, 0.1, 85), lch(0.76, 0.16, 45)],
+  done: [lch(0.9, 0.08, 150), lch(0.74, 0.12, 165)],
   unknown: [lch(0.87, 0.025, 295), lch(0.72, 0.045, 285)],
 };
 const HARMONICS: readonly (readonly [number, number, number, number])[] = [

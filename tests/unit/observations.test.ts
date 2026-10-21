@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { Observations } from "../../src/domain/observations.ts";
 import { isClaudeEvent } from "../../src/integration/claude/protocol.ts";
 
-test("actual noninteractive permission-denial trace never becomes attention", () => {
+test("actual noninteractive permission-denial trace never becomes asking", () => {
   const fixture: { events: unknown[] } = JSON.parse(
     readFileSync(
       new URL(
@@ -22,9 +22,9 @@ test("actual noninteractive permission-denial trace never becomes attention", ()
     );
     observations.receive(event);
     const snapshot = observations.snapshot();
-    assert.notEqual(snapshot.state, "attention", event.eventName);
+    assert.notEqual(snapshot.state, "asking", event.eventName);
     assert.ok(
-      snapshot.sessions.every((session) => session.state !== "attention"),
+      snapshot.sessions.every((session) => session.state !== "asking"),
       event.eventName,
     );
   }

@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { SemanticState } from "../../src/shared/ui-contract.ts";
+import {
+  stateLabels,
+  type SemanticState,
+} from "../../src/shared/ui-contract.ts";
 
 test("native pet uses isolated UI, continuous animation and a read-only list", async () => {
   const home = await mkdtemp(join(tmpdir(), "pagent-electron-"));
@@ -83,9 +86,10 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
       await page.emulateMedia({ reducedMotion: motion });
       for (const state of [
         "idle",
+        "done",
         "working",
-        "attention",
         "unknown",
+        "asking",
       ] as SemanticState[]) {
         await application.evaluate(({ BrowserWindow }, state) => {
           const pet = BrowserWindow.getAllWindows().find((window) =>
@@ -99,7 +103,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
         }, state);
         await expect(page.locator("canvas")).toHaveAttribute(
           "aria-label",
-          new RegExp(state),
+          new RegExp(stateLabels[state]),
         );
         const before = await page
           .locator("canvas")
