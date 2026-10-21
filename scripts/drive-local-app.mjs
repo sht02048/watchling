@@ -53,11 +53,13 @@ const steps = [
     name: "session start",
     event: { ...session("drive-a"), hook_event_name: "SessionStart" },
     expect: "idle",
+    sessions: 1,
   },
   {
     name: "prompt submitted",
     event: { ...session("drive-a"), hook_event_name: "UserPromptSubmit" },
     expect: "working",
+    sessions: 1,
   },
   {
     name: "tool requested",
@@ -69,6 +71,7 @@ const steps = [
       tool_input: bash,
     },
     expect: "working",
+    sessions: 1,
   },
   {
     name: "permission prompt",
@@ -80,6 +83,7 @@ const steps = [
     },
     env: { CLAUDE_CODE_SESSION_ATTENDED: "1" },
     expect: "asking",
+    sessions: 1,
   },
   {
     name: "tool finished",
@@ -91,6 +95,7 @@ const steps = [
       tool_input: bash,
     },
     expect: "working",
+    sessions: 1,
   },
   {
     name: "non-interactive permission in another session",
@@ -102,11 +107,19 @@ const steps = [
     },
     env: { CLAUDE_CODE_SESSION_ATTENDED: "0" },
     expect: "working",
+    sessions: 2,
   },
   {
-    name: "turn ended",
+    name: "first turn ended while the other session works",
     event: { ...session("drive-a"), hook_event_name: "Stop" },
+    expect: "working",
+    sessions: 2,
+  },
+  {
+    name: "all turns ended",
+    event: { ...session("drive-b"), hook_event_name: "Stop" },
     expect: "done",
+    sessions: 2,
   },
   {
     name: "sessions ended",
@@ -115,6 +128,7 @@ const steps = [
       { ...session("drive-b"), hook_event_name: "SessionEnd" },
     ],
     expect: "idle",
+    sessions: 0,
   },
 ];
 
@@ -157,16 +171,19 @@ try {
   await pet.waitForFunction(
     async () => (await window.pagent.getSnapshot()) !== undefined,
   );
-  for (let attempt = 0; attempt < 50; attempt++) {
-    try {
-      await readFile(
-        join(home, "Library/Application Support/pagent/endpoint.json"),
-      );
-      break;
-    } catch {
-      await new Promise((r) => setTimeout(r, 100));
-    }
+  const endpoint = join(
+    home,
+    "Library/Application Support/pagent/endpoint.json",
+  );
+  let ready = false;
+  for (let attempt = 0; attempt < 50 && !ready; attempt++) {
+    ready = await readFile(endpoint).then(
+      () => true,
+      () => false,
+    );
+    if (!ready) await new Promise((r) => setTimeout(r, 100));
   }
+  if (!ready) throw new Error("app never published its endpoint descriptor");
 
   for (const [index, step] of steps.entries()) {
     const events = Array.isArray(step.event) ? step.event : [step.event];
@@ -179,7 +196,11 @@ try {
     let actual;
     for (let attempt = 0; attempt < 30; attempt++) {
       actual = await snapshot();
-      if (actual.state === step.expect) break;
+      if (
+        actual.state === step.expect &&
+        actual.sessions.length === step.sessions
+      )
+        break;
       await new Promise((r) => setTimeout(r, 100));
     }
     const image = join(output, `${index + 1}-${actual.state}-pet.png`);
@@ -188,7 +209,10 @@ try {
     await list.screenshot({
       path: join(output, `${index + 1}-${actual.state}-list.png`),
     });
-    const ok = actual.state === step.expect;
+    const ok =
+      actual.state === step.expect &&
+      actual.sessions.length === step.sessions &&
+      runs.every((run) => run.code === 0 && !run.stdout && !run.stderr);
     failed ||= !ok;
     report.steps.push({
       name: step.name,

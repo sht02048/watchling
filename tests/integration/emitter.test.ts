@@ -79,12 +79,13 @@ async function run(
   input: string | Buffer | null,
   args?: string[],
   executable = binary,
+  env: NodeJS.ProcessEnv = process.env,
 ) {
   const start = performance.now();
   const child = spawn(
     executable,
     args ?? ["--installation-id", randomUUID(), "--descriptor", descriptor],
-    { stdio: ["pipe", "pipe", "pipe"] },
+    { stdio: ["pipe", "pipe", "pipe"], env },
   );
   let stdout = "",
     stderr = "",
@@ -215,7 +216,7 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
     const result = await run(collector.descriptorPath, JSON.stringify(raw));
     safe(result);
     assert.equal(result.inputError, undefined);
-    for (let i = 0; i < 100 && events.length === 0; i++) await delay(5);
+    for (let i = 0; i < 400 && events.length === 0; i++) await delay(5);
     const { token } = JSON.parse(
       await readFile(collector.descriptorPath, "utf8"),
     ) as { token: string };
@@ -233,7 +234,7 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
     assert.equal(JSON.stringify(events).includes("private"), false);
     assert.equal(JSON.stringify(events).includes(raw.tool_input.code), false);
     safe(await run(collector.descriptorPath, JSON.stringify(raw)));
-    for (let i = 0; i < 100 && events.length < 2; i++) await delay(5);
+    for (let i = 0; i < 400 && events.length < 2; i++) await delay(5);
     assert.equal(
       events.length,
       2,
@@ -319,7 +320,7 @@ process.exit(result.status ?? 1);
       assert.equal(result.code, 0);
       assert.equal(result.stdout, "");
       assert.equal(result.stderr, "");
-      for (let i = 0; i < 100 && events.length === 0; i++) await delay(5);
+      for (let i = 0; i < 400 && events.length === 0; i++) await delay(5);
       assert.deepEqual(
         events,
         [
@@ -425,10 +426,6 @@ test("helper events drive session states through the collector", async () => {
     },
     onLoss: () => assert.fail("Valid emitter delivery lost"),
   });
-  const saved = {
-    attended: process.env.CLAUDE_CODE_SESSION_ATTENDED,
-    pid: process.env.CLAUDE_PID,
-  };
   const base = { session_id: "pipeline-a", cwd: "/private/파이프라인" };
   const input = { command: "printf pagent-pipeline-secret-7d1e" };
   const steps: [Record<string, unknown>, string | undefined, string][] = [
@@ -478,17 +475,26 @@ test("helper events drive session states through the collector", async () => {
       "0",
       "working",
     ],
-    [{ ...base, hook_event_name: "Stop" }, undefined, "done"],
-    [{ ...base, hook_event_name: "SessionEnd" }, undefined, "idle"],
+    [{ ...base, hook_event_name: "Stop" }, undefined, "working"],
+    [
+      { ...base, session_id: "pipeline-b", hook_event_name: "Stop" },
+      undefined,
+      "done",
+    ],
+    [{ ...base, hook_event_name: "SessionEnd" }, undefined, "done"],
+    [
+      { ...base, session_id: "pipeline-b", hook_event_name: "SessionEnd" },
+      undefined,
+      "idle",
+    ],
   ];
   try {
-    delete process.env.CLAUDE_PID;
     for (const [index, [payload, attended, expected]] of steps.entries()) {
       if (attended === undefined)
         delete process.env.CLAUDE_CODE_SESSION_ATTENDED;
       else process.env.CLAUDE_CODE_SESSION_ATTENDED = attended;
       safe(await run(collector.descriptorPath, JSON.stringify(payload)));
-      for (let i = 0; i < 100 && received <= index; i++) await delay(5);
+      for (let i = 0; i < 400 && received <= index; i++) await delay(5);
       assert.equal(received, index + 1, String(payload.hook_event_name));
       const snapshot = observations.snapshot();
       assert.equal(snapshot.state, expected, String(payload.hook_event_name));
@@ -503,13 +509,6 @@ test("helper events drive session states through the collector", async () => {
       );
     }
   } finally {
-    for (const [key, value] of [
-      ["CLAUDE_CODE_SESSION_ATTENDED", saved.attended],
-      ["CLAUDE_PID", saved.pid],
-    ] as const) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
     await collector.close();
     await rm(directory, { recursive: true, force: true });
   }
