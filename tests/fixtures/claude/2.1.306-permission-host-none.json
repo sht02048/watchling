@@ -1,0 +1,59 @@
+{
+  "provenance": "Actual native-projected metadata from the authorized 2.1.306 noninteractive permission-host-none negative control; not raw upstream JSON",
+  "humanWait": false,
+  "identifiers": "Aliases only; not genuine provider identities or transport UUIDs",
+  "events": [
+    {
+      "eventName": "SessionStart",
+      "sessionId": "id-1",
+      "project": "fixture-project"
+    },
+    {
+      "eventName": "UserPromptSubmit",
+      "sessionId": "id-1",
+      "project": "fixture-project",
+      "promptId": "id-2",
+      "permissionMode": "default"
+    },
+    {
+      "eventName": "PreToolUse",
+      "sessionId": "id-1",
+      "project": "fixture-project",
+      "promptId": "id-2",
+      "permissionMode": "default",
+      "toolName": "Bash",
+      "toolUseId": "id-3"
+    },
+    {
+      "eventName": "PermissionRequest",
+      "sessionId": "id-1",
+      "project": "fixture-project",
+      "promptId": "id-2",
+      "permissionMode": "default",
+      "toolName": "Bash"
+    },
+    {
+      "eventName": "PostToolBatch",
+      "sessionId": "id-1",
+      "project": "fixture-project",
+      "promptId": "id-2",
+      "permissionMode": "default",
+      "toolCalls": [{ "toolName": "Bash", "toolUseId": "id-3" }]
+    },
+    {
+      "eventName": "Stop",
+      "sessionId": "id-1",
+      "project": "fixture-project",
+      "promptId": "id-2",
+      "permissionMode": "default",
+      "stopHookActive": false,
+      "backgroundTasks": []
+    },
+    {
+      "eventName": "SessionEnd",
+      "sessionId": "id-1",
+      "project": "fixture-project",
+      "promptId": "id-2"
+    }
+  ]
+}

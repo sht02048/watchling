@@ -1,6 +1,34 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { Observations } from "../../src/domain/observations.ts";
+import { isClaudeEvent } from "../../src/integration/claude/protocol.ts";
+
+test("actual noninteractive permission-denial trace never becomes attention", () => {
+  const fixture: { events: unknown[] } = JSON.parse(
+    readFileSync(
+      new URL(
+        "../fixtures/claude/2.1.306-permission-host-none.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const observations = new Observations();
+  for (const event of fixture.events) {
+    assert.ok(
+      isClaudeEvent(event),
+      "Captured projected event must satisfy the protocol",
+    );
+    observations.receive(event);
+    const snapshot = observations.snapshot();
+    assert.notEqual(snapshot.state, "attention", event.eventName);
+    assert.ok(
+      snapshot.sessions.every((session) => session.state !== "attention"),
+      event.eventName,
+    );
+  }
+});
 
 test("unverified permission/question candidates are not asserted as human waits", () => {
   const observations = new Observations();
