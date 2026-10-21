@@ -26,6 +26,7 @@ import {
   SETTINGS_LIMIT,
   manageClaudeHooks,
   quoteHookArgument,
+  relocateClaudeHooks,
 } from "../../src/integration/claude/hook-install.ts";
 import { hookEvents, isRecord } from "../../src/integration/claude/protocol.ts";
 
@@ -1433,3 +1434,53 @@ test(
     });
   },
 );
+
+test("relocation rewrites owned hooks to a moved helper and keeps unrelated settings", async () => {
+  await fixture(async (f) => {
+    const original = {
+      theme: "kept",
+      hooks: {
+        Stop: [{ matcher: "", hooks: [{ type: "command", command: "mine" }] }],
+      },
+    };
+    await settings(f, original);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const moved = join(f.home, "Applications", "pagent-hook-emitter");
+    await mkdir(dirname(moved), { mode: 0o700 });
+    await writeFile(moved, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    const result = await relocateClaudeHooks(f.paths, moved);
+    assert.equal(result?.pagent.status, "installed");
+    assert.equal((await json(f.paths.manifestPath)).helperPath, moved);
+    const relocated = await json(f.paths.settingsPath);
+    assert.equal(JSON.stringify(relocated).includes(f.helper), false);
+    for (const event of hookEvents)
+      assert.equal(
+        String(ownedHandler(relocated, event).command).startsWith(
+          quoteHookArgument(moved),
+        ),
+        true,
+      );
+    assert.equal(relocated.theme, "kept");
+    assert.deepEqual(groups(relocated, "Stop")[0], original.hooks.Stop[0]);
+    const before = await tree(f.home);
+    assert.equal(await relocateClaudeHooks(f.paths, moved), null);
+    assert.deepEqual(await tree(f.home), before);
+    await manageClaudeHooks("uninstall", true, f.paths, moved);
+    assert.deepEqual(await json(f.paths.settingsPath), original);
+  });
+});
+
+test("relocation never installs without a manifest or toward a missing helper", async () => {
+  await fixture(async (f) => {
+    await settings(f, { theme: "untouched" });
+    const before = await tree(f.home);
+    assert.equal(await relocateClaudeHooks(f.paths, f.helper), null);
+    assert.deepEqual(await tree(f.home), before);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const installed = await tree(f.home);
+    await refused(
+      relocateClaudeHooks(f.paths, join(f.home, "missing", "helper")),
+    );
+    assert.deepEqual(await tree(f.home), installed);
+  });
+});

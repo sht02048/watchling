@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, normalize } from "node:path";
 
 export function resolveAppPaths(home = homedir()) {
   if (!isAbsolute(home)) throw new TypeError("Home directory must be absolute");
@@ -14,3 +14,21 @@ export function resolveAppPaths(home = homedir()) {
   };
 }
 export type AppPaths = ReturnType<typeof resolveAppPaths>;
+
+export function isInstalledAppLocation(
+  executablePath: string,
+  home = homedir(),
+): boolean {
+  if (
+    !isAbsolute(executablePath) ||
+    normalize(executablePath) !== executablePath
+  )
+    return false;
+  const roots = ["/Applications"];
+  if (isAbsolute(home)) roots.push(join(home, "Applications"));
+  return roots.some(
+    (root) =>
+      dirname(dirname(dirname(dirname(executablePath)))) === root &&
+      /\/[^/]+\.app\/Contents\/MacOS\/[^/]+$/.test(executablePath),
+  );
+}

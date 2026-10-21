@@ -1046,3 +1046,15 @@ export async function manageClaudeHooks(
     await releaseLock(paths, lock);
   }
 }
+
+export async function relocateClaudeHooks(
+  paths: AppPaths,
+  helperPath: string,
+): Promise<HookReport | null> {
+  const home = validateLayout(paths, helperPath);
+  const { manifest } = await inspect(paths, helperPath, home);
+  if (!manifest || manifest.helperPath === helperPath) return null;
+  await validateHelper(helperPath);
+  await manageClaudeHooks("uninstall", true, paths, helperPath);
+  return manageClaudeHooks("install", true, paths, helperPath);
+}

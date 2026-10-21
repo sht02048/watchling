@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import {
   mkdir,
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
   symlink,
   unlink,
@@ -103,6 +104,89 @@ test("packaged apply refuses symlink and nonregular settings without changing ta
     await mkdir(paths.settingsPath);
     await assert.rejects(invoke, refused);
     assert.deepEqual(await readdir(paths.settingsPath), []);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("packaged app relocates hooks only when launched from Applications", async () => {
+  const home = await realpath(
+    await mkdtemp(join(tmpdir(), "pagent-packaged-")),
+  );
+  const paths = resolveAppPaths(home);
+  const built = resolve("build/release/mac-arm64/pagent.app");
+  const installed = join(home, "Applications", "pagent.app");
+  const helper = (bundle: string) =>
+    join(bundle, "Contents/Resources/helpers/pagent-hook-emitter");
+  const cli = (bundle: string, ...args: string[]) =>
+    execute(join(bundle, "Contents/MacOS/pagent"), ["hooks", ...args], {
+      env: { ...process.env, HOME: home },
+      timeout: 10000,
+    });
+  const manifestHelper = async () =>
+    (
+      JSON.parse(await readFile(paths.manifestPath, "utf8")) as {
+        helperPath: string;
+      }
+    ).helperPath;
+  const launch = async (bundle: string, until: () => Promise<boolean>) => {
+    await rm(paths.descriptorPath, { force: true });
+    const child = spawn(join(bundle, "Contents/MacOS/pagent"), [], {
+      env: { ...process.env, HOME: home },
+      stdio: "ignore",
+    });
+    const exited = new Promise((done) => child.once("exit", done));
+    try {
+      for (let attempt = 0; attempt < 150; attempt++) {
+        if (await until().catch(() => false)) return true;
+        await new Promise((done) => setTimeout(done, 100));
+      }
+      return false;
+    } finally {
+      child.kill();
+      await exited;
+    }
+  };
+  const settled = async () => {
+    await readFile(paths.descriptorPath);
+    await new Promise((done) => setTimeout(done, 1000));
+    return true;
+  };
+  const original = { theme: "dark", nested: { keep: [1, 2] } };
+  try {
+    await mkdir(join(home, ".claude"), { mode: 0o700 });
+    await writeFile(paths.settingsPath, JSON.stringify(original), {
+      mode: 0o600,
+    });
+    await mkdir(join(home, "Applications"));
+    await execute("/bin/cp", ["-cR", built, installed]);
+    const untouched = await readFile(paths.settingsPath);
+    assert.equal(await launch(installed, settled), true);
+    assert.deepEqual(await readFile(paths.settingsPath), untouched);
+    await assert.rejects(readFile(paths.manifestPath), { code: "ENOENT" });
+
+    await cli(built, "install", "--apply");
+    assert.equal(await manifestHelper(), helper(built));
+    assert.equal(
+      await launch(
+        installed,
+        async () => (await manifestHelper()) === helper(installed),
+      ),
+      true,
+    );
+    const relocated = await readFile(paths.settingsPath, "utf8");
+    assert.equal(relocated.includes(helper(built)), false);
+    assert.equal(relocated.includes(helper(installed)), true);
+    const moved = await readFile(paths.settingsPath);
+    assert.equal(await launch(built, settled), true);
+    assert.deepEqual(await readFile(paths.settingsPath), moved);
+    assert.equal(await manifestHelper(), helper(installed));
+
+    await cli(installed, "uninstall", "--apply");
+    assert.deepEqual(
+      JSON.parse(await readFile(paths.settingsPath, "utf8")),
+      original,
+    );
   } finally {
     await rm(home, { recursive: true, force: true });
   }
