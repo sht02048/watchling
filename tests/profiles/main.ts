@@ -241,12 +241,15 @@ function checkStats(): void {
         "Authenticated overflow lacks its exact main-clock timestamp",
       );
   }
-  if (firstAuthenticatedDropMs === null && snapshot.state === "unknown")
+  const unknownVisible =
+    snapshot.state === "unknown" ||
+    snapshot.sessions.some((session) => session.state === "unknown");
+  if (firstAuthenticatedDropMs === null && unknownVisible)
     unknownBeforeDrop = true;
   if (
     firstAuthenticatedDropMs !== null &&
     firstUnknownAfterDropMs === null &&
-    snapshot.state === "unknown"
+    unknownVisible
   ) {
     firstUnknownAfterDropMs = at();
     firstUnknownAfterDropDelayMs =
@@ -623,7 +626,7 @@ const api = {
         unknownBeforeDrop,
         dropClock:
           "Collector performance.now() recorded at the actual authenticated queue drop; unknown latency uses the same main performance clock.",
-        note: "Unknown before a drop is not evidence of a confirmed-wait loss transition.",
+        note: "Observations mark sessions unknown only after a known loss, so unknown before a drop indicates a receiver or reducer fault.",
       },
       drain: {
         heldDrains,
