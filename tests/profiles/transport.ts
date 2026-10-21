@@ -143,7 +143,7 @@ let diagnosticNative = false;
 let driverTrace: ReturnType<typeof createProfileTrace> | undefined;
 const unmetEvidence = [
   "Current upstream/reducer capabilities do not represent confirmed approval/question waits with causal clears; candidate corpus roles are not verified provider semantics.",
-  "Confirmed attention in another session, affected-scope confidence transitions, and non-restoration of confirmed waits are unsupported by unknown-only Observations.",
+  "Observations report probable asks, not confirmed waits; affected sessions recover on their next turn, so loss checks cover only the first post-loss sample.",
   "Active operation/wait and terminal retention invariants remain unimplemented; bounded transport replay identity is not provider identity or proof of those invariants. Transient log bounds are not exposed by the agreed fixture controls.",
   "The native internal 150ms boundary is not directly timestamped by this external harness; controlled deadline paths and the independent 500ms wall ceiling are measured separately.",
 ];
@@ -1549,17 +1549,20 @@ function assess(
       firstLoss === null
         ? []
         : main.snapshots.filter((sample) => sample.atMs >= firstLoss);
+    const firstAfterLoss = afterLoss[0]?.snapshot;
     checks.push(
       check(
-        "O no automatic known-state recovery in sampled snapshots",
-        firstLoss !== null &&
-          main.finalSnapshot.state === "unknown" &&
-          afterLoss.every((sample) => sample.snapshot.state === "unknown"),
+        "O sessions present at loss are unknown or asking in the first post-loss sample",
+        firstAfterLoss !== undefined &&
+          firstAfterLoss.sessions.every(
+            (session) =>
+              session.state === "unknown" || session.state === "asking",
+          ),
         {
-          finalState: main.finalSnapshot.state,
-          transitionsAfterLoss: afterLoss.length,
+          firstStates: firstAfterLoss?.sessions.map((session) => session.state),
+          samplesAfterLoss: afterLoss.length,
         },
-        "remain unknown absent a verified causal boundary",
+        "recover only through each session's next turn",
       ),
     );
   }
