@@ -2,6 +2,8 @@ import { app, BrowserWindow, powerMonitor, protocol, screen } from "electron";
 import { Buffer } from "node:buffer";
 import { resolveAppPaths } from "../../src/main/app-paths.ts";
 import { runDesktop, type DesktopControls } from "../../src/main/desktop.ts";
+import type { SnapshotAccounting } from "../../src/main/snapshot-publisher.ts";
+import type { TransportReceipt } from "../../src/integration/claude/protocol.ts";
 import type { Snapshot } from "../../src/shared/ui-contract.ts";
 
 type Profile = "N" | "O";
@@ -44,6 +46,9 @@ const resources: {
   pending: boolean;
 }[] = [];
 const snapshots: { atMs: number; snapshot: Snapshot }[] = [];
+const transportReceipts: (TransportReceipt & { atNs: string })[] = [];
+const snapshotAccounting: SnapshotAccounting[] = [];
+const pendingByWindow = new Map<number, number>();
 const actions: Action[] = [];
 const hidden: { fromMs: number; untilMs: number | null }[] = [];
 const displaySamples: {
@@ -125,6 +130,46 @@ function requiredControls(): DesktopControls {
   if (!controls) throw new Error("runDesktop did not provide DesktopControls");
   return controls;
 }
+function recordReceipt(receipt: TransportReceipt): void {
+  const previous = transportReceipts.at(-1);
+  if (
+    !Number.isSafeInteger(receipt.receivedSeq) ||
+    receipt.receivedSeq <= (previous?.receivedSeq ?? 0)
+  )
+    violations.add("Transport receipt sequence did not strictly increase");
+  append(
+    transportReceipts,
+    { ...receipt, atNs: process.hrtime.bigint().toString() },
+    4096,
+    "Transport receipt",
+  );
+}
+function recordSnapshot(record: SnapshotAccounting): void {
+  const previous = pendingByWindow.get(record.windowId) ?? 0;
+  const last = snapshotAccounting.at(-1);
+  const expected =
+    previous +
+    (record.kind === "scheduled" ? 1 : record.kind === "materialized" ? 0 : -1);
+  if (
+    (expected !== 0 && expected !== 1) ||
+    record.pending !== expected ||
+    (record.kind === "materialized" && previous !== 1)
+  )
+    violations.add("Snapshot unpublished count transition violated its bound");
+  if (
+    !Number.isSafeInteger(record.bytes) ||
+    record.bytes < 0 ||
+    record.bytes > 128 * 1024 ||
+    (record.pending === 0 && record.bytes !== 0) ||
+    !Number.isFinite(record.atMs) ||
+    (last !== undefined && record.atMs < last.atMs)
+  )
+    violations.add(
+      "Snapshot mutation accounting violated its byte/clock bound",
+    );
+  pendingByWindow.set(record.windowId, record.pending);
+  append(snapshotAccounting, record, 16_000, "Snapshot mutation");
+}
 function checkStats(): void {
   const current = requiredControls();
   if (!current.collector) {
@@ -140,6 +185,8 @@ function checkStats(): void {
     maximumQueuedBytes: 1024 * 1024,
     connectionBytes: 128 * 1024,
     maximumConnectionBytes: 128 * 1024,
+    dedupSize: 4096,
+    maximumDedupSize: 4096,
   };
   for (const key of [
     ...Object.keys(bounds),
@@ -148,6 +195,9 @@ function checkStats(): void {
     "overflow",
     "consumerFailures",
     "authenticatedOverflow",
+    "duplicateFrames",
+    "delivered",
+    "dedupEvictions",
   ]) {
     const value = stats[key];
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
@@ -162,8 +212,6 @@ function checkStats(): void {
   if (snapshotBytes > 128 * 1024) violations.add("Snapshot exceeded 128 KiB");
   if (snapshot.sessions.length > 128)
     violations.add("Snapshot session count exceeded 128");
-  if (typeof pending !== "boolean")
-    violations.add("isSnapshotPending did not return a boolean");
   const firstDrop = stats.firstAuthenticatedOverflowAt;
   if (
     firstDrop !== null &&
@@ -515,11 +563,14 @@ const api = {
       profile: selected,
       durationMs,
       finishedMs,
+      loadStartNs: loadStart.toString(),
       loadStartMs: at(loadStart),
       loop,
       rss,
       resources,
       snapshots,
+      transportReceipts,
+      snapshotAccounting,
       actions,
       hidden,
       displaySamples,
@@ -542,11 +593,12 @@ const api = {
       },
       logStreams: { stdoutBytes, stderrBytes, contentsRetained: false },
       collectorBoundEvidence:
-        "The production collector asserts count/charged-byte bounds after every state change; this fixture also samples its high-water statistics.",
+        "The production collector asserts connection/queue/dedup count and charged-byte bounds after every state change; this fixture also samples its high-water statistics and records every authenticated receipt.",
+      snapshotBoundEvidence:
+        "Every scheduling/materialization/publication/cancellation transition records per-window unpublished count and encoded bytes; mutation assertions, not the periodic pending boolean, establish the implemented snapshot bounds.",
       violations: [...violations],
       unsupportedEvidence: [
-        "DesktopControls exposes one pending boolean, not per-window pending counts/bytes.",
-        "Snapshot does not expose active operation/wait or dedup/terminal counts.",
+        "Active operation/wait and terminal retention invariants remain unimplemented; transport dedup evidence is not their proof.",
         "Confirmed approval/question wait preservation needs provider/reducer capabilities; unknown-only output cannot prove it.",
       ],
     };
@@ -557,6 +609,8 @@ Object.defineProperty(globalThis, "__pagentTransportProfile", { value: api });
 
 await runDesktop(resolveAppPaths(home).userData, {
   scheduleDrain,
+  onTransportReceipt: recordReceipt,
+  onSnapshotAccounting: recordSnapshot,
   onStarted: (current: DesktopControls) => {
     controls = current;
     powerMonitor.on("lock-screen", locked);

@@ -20,6 +20,11 @@ import {
 import { attachIpc } from "./ipc.ts";
 import { clampWindow, listPosition } from "./geometry.ts";
 import { PositionStore } from "./position-store.ts";
+import type { TransportReceipt } from "../integration/claude/protocol.ts";
+import {
+  createSnapshotPublisher,
+  type SnapshotAccounting,
+} from "./snapshot-publisher.ts";
 
 export interface DesktopControls {
   collector: Awaited<ReturnType<typeof startCollector>> | undefined;
@@ -32,6 +37,8 @@ export interface DesktopControls {
 export interface DesktopOptions {
   scheduleDrain?: CollectorOptions["scheduleDrain"];
   onStarted?: (controls: DesktopControls) => void;
+  onTransportReceipt?: (receipt: TransportReceipt) => void;
+  onSnapshotAccounting?: (record: SnapshotAccounting) => void;
 }
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -46,7 +53,7 @@ let timer: ReturnType<typeof setInterval> | undefined;
 let detachIpc: (() => void) | undefined;
 let store: PositionStore | undefined;
 let collector: Awaited<ReturnType<typeof startCollector>> | undefined;
-let publishTimer: ReturnType<typeof setTimeout> | undefined;
+let publisher: ReturnType<typeof createSnapshotPublisher> | undefined;
 let quitting = false;
 let quitFlushed = false;
 let cleanupStarted = false;
@@ -58,20 +65,7 @@ const observations = new Observations();
 let snapshot = observations.snapshot();
 
 function queueSnapshot(): void {
-  if (quitting || publishTimer) return;
-  publishTimer = setTimeout(() => {
-    publishTimer = undefined;
-    snapshot = observations.snapshot();
-    for (const window of [pet, list]) {
-      if (
-        window &&
-        !window.isDestroyed() &&
-        !window.webContents.isDestroyed()
-      ) {
-        window.webContents.send("pagent:snapshot-changed", snapshot);
-      }
-    }
-  }, 50);
+  if (!quitting) publisher?.request();
 }
 
 function configureWindow(window: BrowserWindow): void {
@@ -303,9 +297,35 @@ async function start(options: DesktopOptions): Promise<void> {
       { label: "종료", click: () => app.quit() },
     ]),
   );
+  publisher = createSnapshotPublisher({
+    getSnapshot: () => {
+      snapshot = observations.snapshot();
+      return snapshot;
+    },
+    getTargets: () =>
+      [pet, list]
+        .filter((window): window is BrowserWindow =>
+          Boolean(
+            window &&
+            !window.isDestroyed() &&
+            !window.webContents.isDestroyed(),
+          ),
+        )
+        .map((window) => ({
+          id: window.id,
+          send: (value: Snapshot) =>
+            window.webContents.send("pagent:snapshot-changed", value),
+        })),
+    ...(options.onSnapshotAccounting
+      ? { onAccounting: options.onSnapshotAccounting }
+      : {}),
+  });
   try {
     collector = await startCollector({
       directory: app.getPath("userData"),
+      ...(options.onTransportReceipt
+        ? { onReceipt: options.onTransportReceipt }
+        : {}),
       ...(options.scheduleDrain
         ? { scheduleDrain: options.scheduleDrain }
         : {}),
@@ -341,7 +361,7 @@ async function start(options: DesktopOptions): Promise<void> {
     hide: hidePet,
     show: showPet,
     getSnapshot: () => snapshot,
-    isSnapshotPending: () => publishTimer !== undefined,
+    isSnapshotPending: () => publisher?.isPending() ?? false,
   });
 }
 
@@ -364,7 +384,7 @@ export async function runDesktop(
         await startup;
         endDrag();
         if (timer) clearInterval(timer);
-        if (publishTimer) clearTimeout(publishTimer);
+        publisher?.cancel();
         detachIpc?.();
         if (app.isReady()) {
           screen.removeListener("display-removed", keepOnScreen);

@@ -1,4 +1,9 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import assert from "node:assert/strict";
 import { createConnection, createServer } from "node:net";
 import type { Socket } from "node:net";
@@ -23,19 +28,36 @@ import {
   isToken,
   MAX_FRAME_BYTES,
 } from "./protocol.ts";
-import type { ClaudeEvent, Endpoint } from "./protocol.ts";
+import type {
+  ClaudeEvent,
+  Endpoint,
+  Frame,
+  TransportReceipt,
+} from "./protocol.ts";
 
 export type LossReason =
   "capacity" | "malformed-authenticated-frame" | "consumer-failed";
 export interface CollectorOptions {
   directory: string;
-  onEvent: (event: ClaudeEvent) => void;
+  onEvent: (
+    event: ClaudeEvent,
+    identity: { eventId: string; receivedSeq: number },
+  ) => void;
   onLoss: (reason: LossReason) => void;
+  // Fixture-only in-process observation of authenticated decisions; never IPC.
+  onReceipt?: (receipt: TransportReceipt) => void;
   // Dependency injection for deterministic drain-only saturation tests; never IPC.
   scheduleDrain?: (callback: () => void) => () => void;
 }
 export interface CollectorStats {
+  // Admitted frames: queued unique emissions plus authenticated exact replays.
   accepted: number;
+  duplicateFrames: number;
+  // Successful onEvent callbacks; observer failures do not alter this count.
+  delivered: number;
+  dedupSize: number;
+  maximumDedupSize: number;
+  dedupEvictions: number;
   rejected: number;
   overflow: number;
   consumerFailures: number;
@@ -51,6 +73,22 @@ export interface CollectorStats {
 }
 const uid = process.getuid!();
 const socketPrefix = join(tmpdir(), `pagent-${uid}-`);
+const MAX_RECENT_FRAMES = 4096;
+function eventDigest(event: ClaudeEvent): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(event, (_key, value: unknown) =>
+        isRecord(value)
+          ? Object.fromEntries(
+              Object.keys(value)
+                .sort()
+                .map((key) => [key, value[key]]),
+            )
+          : value,
+      ),
+    )
+    .digest("hex");
+}
 function missing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
@@ -193,11 +231,25 @@ export async function startCollector(options: CollectorOptions) {
     throw new Error("Unix socket path too long");
   }
   const sockets = new Set<Socket>();
-  const queue: { event: ClaudeEvent; bytes: number }[] = [];
+  const queue: {
+    event: ClaudeEvent;
+    eventId: string;
+    receivedSeq: number;
+    bytes: number;
+  }[] = [];
+  // Replay suppression covers only this retained FIFO window. Evicting a
+  // transport ID never evicts an operation/wait or establishes provider causality.
+  // Store only content digests, never raw frames; duplicate hits do not refresh it.
+  const recentFrames = new Map<string, string>();
+  let receivedSeq = 0;
   let queuedBytes = 0;
   let connectionBytes = 0;
   const counters = {
     accepted: 0,
+    duplicateFrames: 0,
+    delivered: 0,
+    maximumDedupSize: 0,
+    dedupEvictions: 0,
     rejected: 0,
     overflow: 0,
     consumerFailures: 0,
@@ -209,9 +261,14 @@ export async function startCollector(options: CollectorOptions) {
   };
   function checkBounds(): void {
     assert(sockets.size <= 16 && queue.length <= 128);
+    assert(recentFrames.size <= MAX_RECENT_FRAMES);
     assert(queuedBytes >= 0 && queuedBytes <= 128 * MAX_FRAME_BYTES);
     assert(connectionBytes >= 0 && connectionBytes <= 16 * MAX_FRAME_BYTES);
     counters.maximumQueue = Math.max(counters.maximumQueue, queue.length);
+    counters.maximumDedupSize = Math.max(
+      counters.maximumDedupSize,
+      recentFrames.size,
+    );
     counters.maximumQueuedBytes = Math.max(
       counters.maximumQueuedBytes,
       queuedBytes,
@@ -236,6 +293,16 @@ export async function startCollector(options: CollectorOptions) {
       console.error("Collector loss handler failed");
     }
   }
+  function receipt(value: TransportReceipt): void {
+    if (!options.onReceipt) return;
+    try {
+      // A fixture must not mutate queued provider metadata or interrupt admission.
+      options.onReceipt({ ...value, event: structuredClone(value.event) });
+    } catch {
+      counters.consumerFailures++;
+      loss("consumer-failed");
+    }
+  }
   function drain(): void {
     cancelDrain = undefined;
     if (closing) return;
@@ -245,11 +312,12 @@ export async function startCollector(options: CollectorOptions) {
       count < 16 && queue.length && performance.now() - start < 4;
       count++
     ) {
-      const { event, bytes } = queue.shift()!;
+      const { event, eventId, receivedSeq, bytes } = queue.shift()!;
       queuedBytes -= bytes;
       checkBounds();
       try {
-        options.onEvent(event);
+        options.onEvent(event, { eventId, receivedSeq });
+        counters.delivered++;
       } catch {
         counters.consumerFailures++;
         loss("consumer-failed");
@@ -277,6 +345,39 @@ export async function startCollector(options: CollectorOptions) {
         loss("malformed-authenticated-frame");
     } catch {
       /* Unauthenticated malformed input cannot assert a session failure. */
+    }
+  }
+  function admit(frame: Frame, bytes: number): void {
+    const digest = eventDigest(frame.event);
+    const previous = recentFrames.get(frame.eventId);
+    if (previous !== undefined && previous !== digest) {
+      counters.rejected++;
+      loss("malformed-authenticated-frame");
+      return;
+    }
+    const identity = { eventId: frame.eventId, receivedSeq: ++receivedSeq };
+    if (previous !== undefined) {
+      counters.accepted++;
+      counters.duplicateFrames++;
+      receipt({ ...identity, disposition: "duplicate", event: frame.event });
+    } else if (queue.length >= 128) {
+      counters.overflow++;
+      counters.authenticatedOverflow++;
+      counters.firstAuthenticatedOverflowAt ??= performance.now();
+      loss("capacity");
+      receipt({ ...identity, disposition: "overflow", event: frame.event });
+    } else {
+      if (recentFrames.size === MAX_RECENT_FRAMES) {
+        recentFrames.delete(recentFrames.keys().next().value!);
+        counters.dedupEvictions++;
+      }
+      recentFrames.set(frame.eventId, digest);
+      counters.accepted++;
+      queue.push({ event: frame.event, ...identity, bytes });
+      queuedBytes += bytes;
+      checkBounds();
+      receipt({ ...identity, disposition: "queued", event: frame.event });
+      if (!cancelDrain) cancelDrain = schedule(drain);
     }
   }
   const server = createServer(
@@ -343,18 +444,7 @@ export async function startCollector(options: CollectorOptions) {
           if (!frame) malformed(buffer);
           else if (!authenticated(frame.epoch, frame.token))
             counters.rejected++;
-          else if (queue.length >= 128) {
-            counters.overflow++;
-            counters.authenticatedOverflow++;
-            counters.firstAuthenticatedOverflowAt ??= performance.now();
-            loss("capacity");
-          } else {
-            counters.accepted++;
-            queue.push({ event: frame.event, bytes: buffer.length });
-            queuedBytes += buffer.length;
-            checkBounds();
-            if (!cancelDrain) cancelDrain = schedule(drain);
-          }
+          else admit(frame, buffer.length);
         }
         releaseBuffer();
         socket.destroy();
@@ -398,6 +488,7 @@ export async function startCollector(options: CollectorOptions) {
     stats(): CollectorStats {
       return {
         ...counters,
+        dedupSize: recentFrames.size,
         activeConnections: sockets.size,
         queued: queue.length,
         queuedBytes,
@@ -409,6 +500,7 @@ export async function startCollector(options: CollectorOptions) {
       closing = true;
       cancelDrain?.();
       queue.length = 0;
+      recentFrames.clear();
       queuedBytes = 0;
       checkBounds();
       closed = (async () => {

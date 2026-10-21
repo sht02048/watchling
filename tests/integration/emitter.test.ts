@@ -14,7 +14,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { startCollector } from "../../src/integration/claude/collector.ts";
-import type { ClaudeEvent } from "../../src/integration/claude/protocol.ts";
+import {
+  isEpoch,
+  type ClaudeEvent,
+} from "../../src/integration/claude/protocol.ts";
 
 const binary = join(
   execFileSync(
@@ -168,9 +171,13 @@ test("independent watchdog exits successfully while the main thread is blocked",
 test("actual Swift helper delivers only metadata to the private collector", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pagent-emitter-test-"));
   const events: ClaudeEvent[] = [];
+  const identities: { eventId: string; receivedSeq: number }[] = [];
   const collector = await startCollector({
     directory,
-    onEvent: (event) => events.push(event),
+    onEvent: (event, identity) => {
+      events.push(event);
+      identities.push(identity);
+    },
     onLoss: () => assert.fail("Valid emitter delivery lost"),
   });
   try {
@@ -189,6 +196,20 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
       },
     ]);
     assert.equal(JSON.stringify(events).includes("private"), false);
+    safe(await run(collector.descriptorPath, JSON.stringify(raw)));
+    for (let i = 0; i < 100 && events.length < 2; i++) await delay(5);
+    assert.equal(
+      events.length,
+      2,
+      "Distinct native emissions must not be merged by payload",
+    );
+    assert.deepEqual(events[0], events[1]);
+    assert.ok(identities.every((identity) => isEpoch(identity.eventId)));
+    assert.equal(
+      new Set(identities.map((identity) => identity.eventId)).size,
+      2,
+    );
+    assert.ok(identities[1]!.receivedSeq > identities[0]!.receivedSeq);
     const stalled = await run(collector.descriptorPath, null);
     safe(stalled);
     assert.ok(

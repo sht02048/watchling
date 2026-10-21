@@ -44,6 +44,15 @@ export interface Frame {
   version: 1;
   epoch: string;
   token: string;
+  // One helper emission's transport identity, never provider causality.
+  eventId: string;
+  event: ClaudeEvent;
+}
+export interface TransportReceipt {
+  eventId: string;
+  // Local authenticated receipt order, not provider chronology.
+  receivedSeq: number;
+  disposition: "queued" | "duplicate" | "overflow";
   event: ClaudeEvent;
 }
 
@@ -64,6 +73,7 @@ function isText(value: unknown, limit: number): value is string {
 export function isEpoch(value: unknown): value is string {
   return (
     typeof value === "string" &&
+    value.length === 36 &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value)
   );
 }
@@ -170,10 +180,11 @@ export function decodeFrame(bytes: Uint8Array): Frame | null {
     );
     if (
       !isRecord(value) ||
-      Object.keys(value).length !== 4 ||
+      Object.keys(value).length !== 5 ||
       value.version !== 1 ||
       !isEpoch(value.epoch) ||
       !isToken(value.token) ||
+      !isEpoch(value.eventId) ||
       !isClaudeEvent(value.event)
     )
       return null;
@@ -181,6 +192,7 @@ export function decodeFrame(bytes: Uint8Array): Frame | null {
       version: 1,
       epoch: value.epoch,
       token: value.token,
+      eventId: value.eventId,
       event: value.event,
     };
   } catch {

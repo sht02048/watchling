@@ -210,6 +210,8 @@ private struct Frame: Encodable {
     let version = 1
     let epoch: String
     let token: String
+    // Transport identity for one emission, not a provider operation or turn ID.
+    let eventId = UUID().uuidString.lowercased()
     let event: ClaudeEvent
 }
 

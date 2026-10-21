@@ -42,6 +42,11 @@ import {
 import { quoteHookArgument } from "../../src/integration/claude/hook-install.ts";
 import type { Snapshot } from "../../src/shared/ui-contract.ts";
 import type { ArmReport, MainReport, ProfileFixture } from "./main.ts";
+import {
+  diagnoseOrder,
+  diagnoseProducer,
+  type ProducerTiming,
+} from "./order.ts";
 
 type Profile = "N" | "O";
 type Slot = {
@@ -71,13 +76,13 @@ type WireResult = {
   elapsedMs: number;
   error: string | null;
 };
-type Attempt = {
-  index: number;
+type Attempt = ProducerTiming & {
   role: string;
-  scheduledMs: number;
-  startedMs: number | null;
+  preparedNs: string;
+  startedNs: string | null;
+  finishedNs: string | null;
   finishedMs: number | null;
-  reason: string | null;
+  eventId: string | null;
   sha256: string | null;
   bytes: number;
   result: HelperResult | WireResult | null;
@@ -87,8 +92,10 @@ type Capture = {
   bytes: number;
   sha256: string;
   atNs: string;
-  forwarded: boolean;
-  hasEventId: boolean;
+  eventId: string;
+  forwardingStartedNs: string | null;
+  forwardedNs: string | null;
+  processingMs: number;
 };
 type RendererSample = {
   scheduledMs: number;
@@ -116,9 +123,8 @@ const abort = new AbortController();
 let activeApplication: ElectronApplication | undefined;
 const unmetEvidence = [
   "Current upstream/reducer capabilities do not represent confirmed approval/question waits with causal clears; candidate corpus roles are not verified provider semantics.",
-  "Current native Frame/ClaudeEvent has no eventId. Exact frame bytes are replayed, but event-ID deduplication semantics cannot be verified.",
   "Confirmed attention in another session, affected-scope confidence transitions, and non-restoration of confirmed waits are unsupported by unknown-only Observations.",
-  "Active operation/wait and global dedup/terminal bounds, per-window pending snapshot count/bytes, and transient log bounds are not exposed by the agreed fixture controls.",
+  "Active operation/wait and terminal retention invariants remain unimplemented; bounded transport replay identity is not provider identity or proof of those invariants. Transient log bounds are not exposed by the agreed fixture controls.",
   "The native internal 150ms boundary is not directly timestamped by this external harness; controlled deadline paths and the independent 500ms wall ceiling are measured separately.",
 ];
 const now = (): bigint => process.hrtime.bigint();
@@ -430,7 +436,7 @@ function corpus(profile: Profile): Slot[] {
 function wire(
   index: number,
   endpoint: Endpoint,
-): { bytes: Buffer; role: string } {
+): { bytes: Buffer; role: string; eventId: string } {
   const kind = index % 10;
   const root = Math.floor(index / 10) % 8;
   const event: ClaudeEvent = {
@@ -441,12 +447,15 @@ function wire(
   };
   const wrongToken =
     (endpoint.token[0] === "0" ? "1" : "0") + endpoint.token.slice(1);
+  const eventId = `50414745-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
   return {
+    eventId,
     bytes: padded(
       {
         version: 1,
         epoch: endpoint.epoch,
         token: kind === 9 ? wrongToken : endpoint.token,
+        eventId,
         event,
       },
       kind === 8 ? 8193 : 8192,
@@ -642,8 +651,10 @@ async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
   }
   const live = new Set<Socket>();
   const captured: Capture[] = [];
-  const originals = new Map<string, Buffer>();
-  const forwarded = new Set<string>();
+  const originals = new Map<
+    string,
+    { bytes: Buffer; sha256: string; eventId: string }
+  >();
   const failures = new Set<string>();
   const lookup = new Map<string, Slot>();
   for (const slot of slots)
@@ -675,6 +686,7 @@ async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
       live.delete(socket);
     });
     socket.on("data", (chunk: Buffer) => {
+      const processingStarted = now();
       if (finished) {
         failures.add("Helper wrote trailing data after its frame");
         return;
@@ -713,30 +725,36 @@ async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
         key,
         bytes: buffer.length,
         sha256: sha256(buffer),
-        atNs: now().toString(),
-        forwarded: false,
-        hasEventId: "eventId" in frame || "eventId" in frame.event,
+        atNs: processingStarted.toString(),
+        eventId: frame.eventId,
+        forwardingStartedNs: null,
+        forwardedNs: null,
+        processingMs: 0,
       };
       captured.push(record);
       if (slot && (slot.index % 20 === 1 || slot.index % 20 === 7)) {
         if (!originals.has(slot.key)) {
           if (originals.size >= 120)
             failures.add("Replay source cache bound exceeded");
-          else originals.set(slot.key, Buffer.from(buffer));
+          else
+            originals.set(slot.key, {
+              bytes: Buffer.from(buffer),
+              sha256: record.sha256,
+              eventId: frame.eventId,
+            });
         }
       }
       const bytes = buffer;
       const task = (async () => {
+        record.forwardingStartedNs = now().toString();
         const result = await send(bytes, endpoint.socketPath);
         if (!result.written || result.error)
           failures.add(
             `Proxy forwarding failed: ${result.error ?? "frame not written"}`,
           );
-        else {
-          record.forwarded = true;
-          if (slot) forwarded.add(slot.key);
-        }
+        else record.forwardedNs = now().toString();
       })();
+      record.processingMs = msSince(processingStarted);
       pending.add(task);
       void task
         .finally(() => {
@@ -768,20 +786,21 @@ async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
     endpoint: { ...endpoint, socketPath },
     captured,
     originals,
-    forwarded,
     failures,
     beginLoad() {
       if (pending.size || live.size)
         failures.add("Warm-up forwarding did not settle before load");
       originals.clear();
-      forwarded.clear();
     },
     metrics: () => ({
       bytesHighWater,
       connectionsHighWater,
       retainedReplayBytes: [...originals.values()].reduce(
-        (total, bytes) => total + bytes.length,
+        (total, source) => total + source.bytes.length,
         0,
+      ),
+      completedFrameProcessing: distribution(
+        captured.map((frame) => frame.processingMs),
       ),
     }),
     async close() {
@@ -804,10 +823,12 @@ async function fixedLane(
     bytes: number;
     sha256: string | null;
     replay?: boolean;
+    eventId?: string;
     prerequisite?: string | null;
     run: () => Promise<HelperResult | WireResult>;
   },
 ) {
+  const cpuStart = process.cpuUsage();
   const attempts: Attempt[] = [];
   const inFlight = new Set<Promise<void>>();
   let maximumConcurrent = 0;
@@ -817,27 +838,42 @@ async function fixedLane(
   for (let index = 0; index < count; index++) {
     const scheduled = start + BigInt(index * intervalMs) * 1_000_000n;
     if (!abort.signal.aborted) await until(scheduled);
+    const wokeMs = msSince(start);
+    const preparationStartedMs = msSince(start);
     const input = make(index);
+    const prepared = now();
     const entry: Attempt = {
       index,
       role: input.role,
       scheduledMs: index * intervalMs,
+      wokeMs,
+      preparationStartedMs,
+      preparedMs: Number(prepared - start) / 1e6,
+      preparedNs: prepared.toString(),
+      decisionMs: 0,
+      dispatchReturnedMs: null,
       startedMs: null,
+      startedNs: null,
+      finishedNs: null,
       finishedMs: null,
+      eventId: input.eventId ?? null,
       reason: null,
       sha256: input.sha256,
       bytes: input.bytes,
       result: null,
     };
     attempts.push(entry);
+    entry.decisionMs = msSince(start);
     if (abort.signal.aborted) entry.reason = "aborted";
-    else if (msSince(scheduled) >= intervalMs)
+    else if (entry.decisionMs - entry.scheduledMs >= intervalMs)
       entry.reason = "missed-absolute-slot";
     else if (input.replay ? replayActive >= 32 : primaryActive >= concurrency)
       entry.reason = "concurrency-limit";
     else if (input.prerequisite) entry.reason = input.prerequisite;
     else {
-      entry.startedMs = msSince(start);
+      const launched = now();
+      entry.startedNs = launched.toString();
+      entry.startedMs = Number(launched - start) / 1e6;
       if (input.replay) replayActive++;
       else primaryActive++;
       maximumConcurrent = Math.max(maximumConcurrent, primaryActive);
@@ -848,11 +884,14 @@ async function fixedLane(
         } catch (error) {
           entry.reason = `attempt-error: ${errorText(error)}`;
         } finally {
-          entry.finishedMs = msSince(start);
+          const finished = now();
+          entry.finishedNs = finished.toString();
+          entry.finishedMs = Number(finished - start) / 1e6;
           if (input.replay) replayActive--;
           else primaryActive--;
         }
       })();
+      entry.dispatchReturnedMs = msSince(start);
       inFlight.add(task);
       void task.finally(() => inFlight.delete(task));
     }
@@ -867,6 +906,27 @@ async function fixedLane(
     replayConcurrencyLimit: 32,
     concurrencyLimit: concurrency,
     intervalMs,
+    producerTiming: {
+      cpuMicroseconds: process.cpuUsage(cpuStart),
+      wakeDelay: distribution(
+        attempts.map((attempt) => attempt.wokeMs - attempt.scheduledMs),
+      ),
+      preparation: distribution(
+        attempts.map(
+          (attempt) => attempt.preparedMs - attempt.preparationStartedMs,
+        ),
+      ),
+      synchronousDispatch: distribution(
+        attempts.flatMap((attempt) =>
+          attempt.startedMs === null || attempt.dispatchReturnedMs === null
+            ? []
+            : [attempt.dispatchReturnedMs - attempt.startedMs],
+        ),
+      ),
+      missedSlots: diagnoseProducer(attempts, intervalMs),
+      interpretation:
+        "Wake, preparation, decision, and synchronous dispatch use the producer monotonic clock. Late wake alone does not identify OS contention, GC, or callback work. CPU totals cover the shared driver process, not an isolated lane. Every fixed slot is retained; none is backfilled.",
+    },
     attempts,
   };
 }
@@ -1186,6 +1246,68 @@ function assess(
   const checks: Check[] = [];
   const start = arm.loadStartMs;
   const end = arm.recoveryEndMs;
+  const snapshotWindows = [
+    ...new Set(main.snapshotAccounting.map((record) => record.windowId)),
+  ].map((windowId) => {
+    const records = main.snapshotAccounting.filter(
+      (record) => record.windowId === windowId,
+    );
+    const publications = records.filter(
+      (record) => record.kind === "published",
+    );
+    let from = 0;
+    let maximumPublicationsPerSecond = 0;
+    for (const [index, record] of publications.entries()) {
+      while (record.atMs - publications[from]!.atMs >= 1000) from++;
+      maximumPublicationsPerSecond = Math.max(
+        maximumPublicationsPerSecond,
+        index - from + 1,
+      );
+    }
+    return {
+      windowId,
+      records: records.length,
+      scheduled: records.filter((record) => record.kind === "scheduled").length,
+      materialized: records.filter((record) => record.kind === "materialized")
+        .length,
+      published: publications.length,
+      cancelled: records.filter((record) => record.kind === "cancelled").length,
+      maximumPending: Math.max(...records.map((record) => record.pending)),
+      maximumBytes: Math.max(...records.map((record) => record.bytes)),
+      finalPending: records.at(-1)!.pending,
+      maximumPublicationsPerSecond,
+    };
+  });
+  checks.push(
+    check(
+      "every-change per-window unpublished snapshot count/byte evidence",
+      snapshotWindows.length > 0 &&
+        snapshotWindows.every(
+          (window) =>
+            window.scheduled > 0 &&
+            window.materialized > 0 &&
+            window.published > 0 &&
+            window.maximumPending === 1 &&
+            window.maximumBytes > 0 &&
+            window.maximumBytes <= 128 * 1024 &&
+            window.finalPending === 0,
+        ),
+      { windows: snapshotWindows, evidence: main.snapshotBoundEvidence },
+      "all scheduling/materialization/publication/cancellation boundaries; unpublished <=1 and <=128KiB per window",
+    ),
+    check(
+      "snapshot publication rate remains at most 20Hz per window",
+      snapshotWindows.length > 0 &&
+        snapshotWindows.every(
+          (window) => window.maximumPublicationsPerSecond <= 20,
+        ),
+      snapshotWindows.map(({ windowId, maximumPublicationsPerSecond }) => ({
+        windowId,
+        maximumPublicationsPerSecond,
+      })),
+      "at most 20 publications in any half-open 1000ms window, using every publication record",
+    ),
+  );
   const baseline = main.rss
     .filter(
       (sample) =>
@@ -1371,9 +1493,52 @@ function assess(
           "overflow",
           "consumerFailures",
           "authenticatedOverflow",
+          "duplicateFrames",
+          "delivered",
+          "dedupEvictions",
         ].map((name) => [name, stats[name]! - baselineStats[name]!]),
       )
     : null;
+  const receipts = main.transportReceipts.filter(
+    (receipt) => BigInt(receipt.atNs) >= BigInt(main.loadStartNs),
+  );
+  const dispositions = Object.fromEntries(
+    ["queued", "duplicate", "overflow"].map((kind) => [
+      kind,
+      receipts.filter((receipt) => receipt.disposition === kind).length,
+    ]),
+  );
+  checks.push(
+    check(
+      "authenticated collector receipts reconcile accepted/duplicate/overflow frames",
+      delta !== null &&
+        dispositions.queued! + dispositions.duplicate! === delta.accepted &&
+        dispositions.duplicate === delta.duplicateFrames &&
+        dispositions.overflow === delta.authenticatedOverflow &&
+        dispositions.queued === delta.delivered,
+      { dispositions, delta },
+      "one receipt per authenticated valid frame; duplicate frames are accepted but not delivered twice",
+    ),
+    check(
+      "bounded transport replay cache evidence (not operation/wait/terminal proof)",
+      stats !== null &&
+        Number.isSafeInteger(stats.dedupSize) &&
+        stats.dedupSize! > 0 &&
+        stats.dedupSize! <= 4096 &&
+        Number.isSafeInteger(stats.maximumDedupSize) &&
+        stats.maximumDedupSize! >= stats.dedupSize! &&
+        stats.maximumDedupSize! <= 4096 &&
+        Number.isSafeInteger(stats.dedupEvictions) &&
+        stats.dedupEvictions! >= 0,
+      {
+        finalSize: stats?.dedupSize,
+        maximumSize: stats?.maximumDedupSize,
+        evictions: stats?.dedupEvictions,
+        mutationEvidence: main.collectorBoundEvidence,
+      },
+      "transport cache <=4096; profile does not add extra inputs to force eviction",
+    ),
+  );
   checks.push(
     check(
       "collector recovered queue/connections",
@@ -1395,6 +1560,8 @@ function assess(
       check(
         "N accepted every valid helper/replay slot without loss",
         delta?.accepted === 1200 &&
+          delta.duplicateFrames === 120 &&
+          delta.delivered === 1080 &&
           delta.rejected === 0 &&
           delta.overflow === 0 &&
           delta.authenticatedOverflow === 0 &&
@@ -1407,7 +1574,13 @@ function assess(
               attempt.result.error === null,
           ),
         { delta, replayCount: replays.length },
-        { accepted: 1200, replays: 120, loss: 0 },
+        {
+          accepted: 1200,
+          uniqueDeliveries: 1080,
+          duplicateFrames: 120,
+          replays: 120,
+          loss: 0,
+        },
       ),
     );
   } else {
@@ -1729,6 +1902,27 @@ async function runOne(
       failures.push(
         "Warm-up collector work did not drain before the fixed profile",
       );
+    const endpoint = original;
+    const wirePreparationStarted = now();
+    // Fixed inputs and hashes are prepared before the absolute load schedule.
+    // Only native replay bytes depend on frames captured during the load.
+    const preparedWires =
+      profile === "O"
+        ? Array.from({ length: 2000 }, (_, index) => {
+            const frame = wire(index, endpoint);
+            return { ...frame, sha256: sha256(frame.bytes) };
+          })
+        : [];
+    record.producerPreparation = {
+      elapsedMs: msSince(wirePreparationStarted),
+      wireFrames: preparedWires.length,
+      retainedWireBytes: preparedWires.reduce(
+        (total, frame) => total + frame.bytes.length,
+        0,
+      ),
+      scope:
+        "Bounded driver-only input preparation before arming; not collector or main RSS.",
+    };
     proxy.beginLoad();
     const start = now() + 1_000_000_000n;
     const arm = await application.evaluate(
@@ -1744,12 +1938,6 @@ async function runOne(
       durationMs: duration,
     });
     const captured = proxy;
-    const endpoint = original;
-    const orderingViolations: {
-      key: string;
-      predecessor: string;
-      atMs: number;
-    }[] = [];
     const lanePromise = fixedLane(
       slots.length,
       50,
@@ -1758,15 +1946,10 @@ async function runOne(
       (index) => {
         const slot = slots[index]!;
         const replay = profile === "N" && slot.replayOf !== null;
-        const bytes = replay
+        const source = replay
           ? captured.originals.get(slot.replayOf!)
-          : slot.input;
-        if (slot.predecessor && !captured.forwarded.has(slot.predecessor))
-          orderingViolations.push({
-            key: slot.key,
-            predecessor: slot.predecessor,
-            atMs: msSince(start),
-          });
+          : undefined;
+        const bytes = replay ? source?.bytes : slot.input;
         return {
           role: replay
             ? "exact-envelope-replay"
@@ -1774,39 +1957,28 @@ async function runOne(
               ? "native-probe"
               : slot.role,
           replay,
+          ...(source ? { eventId: source.eventId } : {}),
           bytes: bytes?.length ?? 0,
-          sha256: bytes ? sha256(bytes) : null,
+          sha256: replay ? (source?.sha256 ?? null) : slot.sha256,
           // Do not lower scheduled native load to disguise slow/out-of-order
           // emission. Missing causal predecessors are separate failed evidence.
           prerequisite: bytes ? null : "exact-native-replay-source-unavailable",
-          run: async () => {
-            if (!replay) {
-              const result = await helper(command, env, bytes!);
-              // O repeats the candidate source as a NEW probe, not a replay ID.
-              if (
-                profile === "O" &&
-                slot.replayOf &&
-                captured.forwarded.has(slot.replayOf)
-              )
-                captured.forwarded.add(slot.key);
-              return result;
-            }
-            const result = await send(bytes!, endpoint.socketPath);
-            if (result.written && result.error === null)
-              captured.forwarded.add(slot.key);
-            return result;
-          },
+          run: () =>
+            replay
+              ? send(bytes!, endpoint.socketPath)
+              : helper(command, env, bytes!),
         };
       },
     );
     const udsPromise =
       profile === "O"
         ? fixedLane(2000, 5, 32, start, (index) => {
-            const frame = wire(index, endpoint);
+            const frame = preparedWires[index]!;
             return {
               role: frame.role,
+              eventId: frame.eventId,
               bytes: frame.bytes.length,
-              sha256: sha256(frame.bytes),
+              sha256: frame.sha256,
               run: () => send(frame.bytes, endpoint.socketPath),
             };
           })
@@ -1873,6 +2045,40 @@ async function runOne(
     const loadCaptures = proxy.captured.filter(
       (frame) => BigInt(frame.atNs) >= start,
     );
+    const loadReceipts = main.transportReceipts.filter(
+      (receipt) => BigInt(receipt.atNs) >= start,
+    );
+    const capturesByKey = new Map(
+      loadCaptures.map((frame) => [frame.key, frame]),
+    );
+    const orderDiagnostics =
+      profile === "N"
+        ? diagnoseOrder(
+            lane.attempts.map((attempt) => {
+              const slot = slots[attempt.index]!;
+              const frame = capturesByKey.get(slot.key);
+              return {
+                key: slot.key,
+                predecessor: slot.predecessor,
+                eventId: attempt.eventId ?? frame?.eventId ?? null,
+                preparedNs: attempt.preparedNs,
+                startedNs: attempt.startedNs,
+                forwardedNs:
+                  attempt.role === "exact-envelope-replay"
+                    ? attempt.result &&
+                      "written" in attempt.result &&
+                      attempt.result.written &&
+                      !attempt.result.error
+                      ? attempt.finishedNs
+                      : null
+                    : (frame?.forwardedNs ?? null),
+                reason: attempt.reason,
+              };
+            }),
+            loadCaptures,
+            loadReceipts,
+          )
+        : [];
     assessment.checks.push(
       check(
         "actual configured native frames captured",
@@ -1881,13 +2087,55 @@ async function runOne(
         profile === "N" ? 1080 : 200,
       ),
     );
+    const distinctNativeIds = new Set(
+      loadCaptures.map((frame) => frame.eventId),
+    );
+    const receivedIds = new Set(loadReceipts.map((receipt) => receipt.eventId));
+    assessment.checks.push(
+      check(
+        "independent native invocations retain distinct transport UUIDs",
+        distinctNativeIds.size === loadCaptures.length &&
+          loadCaptures.every(
+            (frame) => isEpoch(frame.eventId) && receivedIds.has(frame.eventId),
+          ),
+        {
+          frames: loadCaptures.length,
+          distinctTransportIds: distinctNativeIds.size,
+          observedAtCollector: loadCaptures.filter((frame) =>
+            receivedIds.has(frame.eventId),
+          ).length,
+        },
+        "one helper-generated UUID per invocation, including identical provider payloads, preserved at the collector; not provider causality",
+      ),
+    );
     if (profile === "N")
       assessment.checks.push(
         check(
+          "exact replay preserves captured bytes and transport UUID",
+          lane.attempts
+            .filter((attempt) => attempt.role === "exact-envelope-replay")
+            .every((attempt) => {
+              const source = capturesByKey.get(slots[attempt.index]!.replayOf!);
+              return (
+                source !== undefined &&
+                attempt.eventId === source.eventId &&
+                attempt.sha256 === source.sha256
+              );
+            }),
+          { replaySlots: 120 },
+          "captured envelope unchanged; independent helper invocations are not replays",
+        ),
+        check(
           "fixed corpus predecessor delivery order",
-          orderingViolations.length === 0,
-          orderingViolations,
-          [],
+          orderDiagnostics.length === 1140 &&
+            orderDiagnostics.every((entry) => entry.status === "ordered"),
+          {
+            edges: orderDiagnostics.length,
+            failures: orderDiagnostics.filter(
+              (entry) => entry.status !== "ordered",
+            ),
+          },
+          "1140 predecessor edges proven by actual collector receipts; missing/unissued/ambiguous evidence fails but is not an inversion",
         ),
       );
     assessment.measuredTransportPassed = assessment.checks.every(
@@ -1900,7 +2148,7 @@ async function runOne(
       renderer,
       nativeAndReplayLane: lane,
       udsLane: uds,
-      orderingViolations,
+      orderDiagnostics,
       capture: {
         frames: proxy.captured,
         ...proxy.metrics(),
@@ -1929,7 +2177,12 @@ async function runOne(
           attempt.role === "exact-envelope-replay" &&
           attempt.startedMs !== null,
       ).length,
-      admitted: assessment.collectorDelta?.accepted ?? null,
+      acceptedFrames: assessment.collectorDelta?.accepted ?? null,
+      duplicateFrames: assessment.collectorDelta?.duplicateFrames ?? null,
+      uniqueDeliveries: assessment.collectorDelta?.delivered ?? null,
+      queuedReceipts: loadReceipts.filter(
+        (receipt) => receipt.disposition === "queued",
+      ).length,
       authenticatedDropped:
         assessment.collectorDelta?.authenticatedOverflow ?? null,
       rejected: assessment.collectorDelta?.rejected ?? null,
@@ -1942,7 +2195,7 @@ async function runOne(
           (!attempt.result.written || attempt.result.error !== null),
       ).length,
       attribution:
-        "Admission/drop counts come from aggregate collector statistics. One-way socket write completion is not an admission ACK; per-slot rejection reasons are not exposed.",
+        "Authenticated admission/duplicate/overflow receipts carry transport UUID and collector receivedSeq. Socket write completion is not an admission ACK. Rejected frames have only aggregate statistics; overlapping identical replay sends are explicitly ambiguous, never inferred FIFO.",
     };
     record.assessment = assessment;
     if (!(record.errorProbes as { passed: boolean }).passed)
@@ -2071,6 +2324,9 @@ export async function runProfiles(options: { profiles: Profile[] }) {
         slots: 1200,
         actualHelperCalls: 1080,
         exactFrameReplays: 120,
+        acceptedFrames: 1200,
+        uniqueDeliveries: 1080,
+        duplicateFrames: 120,
         rate: 20,
         childConcurrency: 4,
       },
@@ -2167,8 +2423,10 @@ export async function runProfiles(options: { profiles: Profile[] }) {
         "dist/preload/index.cjs",
         "tests/profiles/main.ts",
         "tests/profiles/transport.ts",
+        "tests/profiles/order.ts",
         "scripts/profile-transport.mjs",
         "src/main/desktop.ts",
+        "src/main/snapshot-publisher.ts",
         "src/main/ipc.ts",
         "src/integration/claude/collector.ts",
         "src/integration/claude/protocol.ts",
@@ -2183,7 +2441,7 @@ export async function runProfiles(options: { profiles: Profile[] }) {
     report.fixtures = {
       files: await fixtureFiles(normal, overload),
       wireTemplates:
-        "Fixed dummy 36-byte epoch / 64-byte token are substituted with fresh temporary credentials; each actual attempted frame hash/byte count is recorded separately, without saving credentials.",
+        "Fixed dummy 36-byte epoch / 64-byte token are substituted with fresh temporary credentials. Synthetic UDS slots have distinct deterministic transport UUIDs per epoch, never provider IDs. Each actual attempted frame hash/byte count is recorded separately, without saving credentials.",
       corpus:
         "20 slots/block, 8 round-robin root sessions, six parallel tool pairs, two wait/clear candidates, turn boundaries, two replay slots. Missing causal wait support is unmet, not assumed.",
     };
