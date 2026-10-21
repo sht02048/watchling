@@ -26,6 +26,15 @@ export function clampWindow(
   };
 }
 
+export function expand(area: Bounds, inset: number): Bounds {
+  return {
+    x: area.x - inset,
+    y: area.y - inset,
+    width: area.width + inset * 2,
+    height: area.height + inset * 2,
+  };
+}
+
 export function listPosition(
   pet: Bounds,
   area: Bounds,

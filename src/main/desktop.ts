@@ -23,7 +23,7 @@ import {
   type CollectorOptions,
 } from "../integration/claude/collector.ts";
 import { attachIpc } from "./ipc.ts";
-import { clampWindow, listPosition } from "./geometry.ts";
+import { clampWindow, expand, listPosition } from "./geometry.ts";
 import { PositionStore } from "./position-store.ts";
 import type { TransportReceipt } from "../integration/claude/protocol.ts";
 import {
@@ -50,6 +50,8 @@ export interface DesktopOptions {
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const size = { width: 180, height: 180 };
 const listSize = { width: 320, height: 280 };
+// Transparent margin around the body that may sit past the display edge.
+const petInset = 30;
 const csp =
   "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 let pet: BrowserWindow | undefined;
@@ -108,7 +110,7 @@ function updateDrag(cursor: Point): void {
   const dy = cursor.y - dragging.cursor.y;
   if (!dragging.moved && Math.hypot(dx, dy) < 5) return;
   dragging.moved = true;
-  const area = screen.getDisplayNearestPoint(cursor).workArea;
+  const area = expand(screen.getDisplayNearestPoint(cursor).bounds, petInset);
   const position = clampWindow(
     { x: dragging.origin.x + dx, y: dragging.origin.y + dy },
     area,
@@ -156,7 +158,7 @@ function keepOnScreen(): void {
   if (!pet) return;
   endDrag();
   const bounds = pet.getBounds();
-  const area = screen.getDisplayMatching(bounds).workArea;
+  const area = expand(screen.getDisplayMatching(bounds).bounds, petInset);
   const position = clampWindow(bounds, area, size);
   pet.setPosition(position.x, position.y);
   void store?.save(position);
@@ -208,7 +210,9 @@ async function start(options: DesktopOptions): Promise<void> {
     x: area.x + area.width - size.width - 24,
     y: area.y + area.height - size.height - 24,
   };
-  const display = saved ? screen.getDisplayNearestPoint(saved).workArea : area;
+  const display = saved
+    ? expand(screen.getDisplayNearestPoint(saved).bounds, petInset)
+    : area;
   const position = clampWindow(initial, display, size);
   const webPreferences = {
     preload: join(root, "preload", "index.cjs"),

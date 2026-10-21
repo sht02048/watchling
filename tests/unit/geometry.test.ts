@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clampWindow, listPosition } from "../../src/main/geometry.ts";
+import { clampWindow, expand, listPosition } from "../../src/main/geometry.ts";
 import { isPoint } from "../../src/shared/ui-contract.ts";
 
 test("rejects malformed coordinates without coercion", () => {
@@ -45,5 +45,16 @@ test("places list below top-edge pets and above bottom-edge pets", () => {
   assert.deepEqual(
     listPosition({ x: 0, y: 24, width: 180, height: 180 }, area, list),
     { x: 0, y: 212 },
+  );
+});
+test("pets may overhang display edges by their transparent margin", () => {
+  const area = expand({ x: 0, y: 0, width: 1440, height: 900 }, 30);
+  assert.deepEqual(
+    clampWindow({ x: 5000, y: 5000 }, area, { width: 180, height: 180 }),
+    { x: 1290, y: 750 },
+  );
+  assert.deepEqual(
+    clampWindow({ x: -5000, y: -5000 }, area, { width: 180, height: 180 }),
+    { x: -30, y: -30 },
   );
 });
