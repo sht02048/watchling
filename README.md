@@ -36,6 +36,7 @@ The pet shows the most urgent state across sessions: `asking`, `unknown`, `worki
 | Command                    | What it does                                                   |
 | -------------------------- | -------------------------------------------------------------- |
 | `npm start`                | Build and run the app from source                              |
+| `npm run playground`       | Open a browser page to preview every pet state                 |
 | `npm run build`            | Bundle main, preload and renderers into `dist/`                |
 | `npm run build:helper`     | Build the Swift hook helper                                    |
 | `npm run build:local-app`  | Package the app and DMG into `build/release/`                  |

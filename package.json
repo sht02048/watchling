@@ -11,6 +11,7 @@
     "build:local-app": "npm run build && npm run build:helper && node scripts/package.mjs",
     "typecheck": "tsc --noEmit",
     "start": "npm run build && electron .",
+    "playground": "node scripts/playground.mjs",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
     "test:integration": "npm run build:helper && node --experimental-strip-types --test tests/integration/*.test.ts",
     "test:packaged": "npm run build:local-app && node --experimental-strip-types --test tests/packaged/*.test.ts",

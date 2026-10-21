@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>pagent playground</title>
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="index.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>pagent playground</h1>
+        <p>
+          상태를 눌러 펫이 어떻게 바뀌는지 확인하세요. 숫자 키나 ←→ 키로도 바꿀
+          수 있어요.
+        </p>
+      </header>
+      <section class="stage" data-background="light">
+        <figure>
+          <canvas id="actual" class="actual"></canvas>
+          <figcaption>실제 크기</figcaption>
+        </figure>
+        <figure>
+          <canvas id="large" class="large"></canvas>
+          <figcaption>2배</figcaption>
+        </figure>
+      </section>
+      <nav id="states" aria-label="상태"></nav>
+      <p id="description" aria-live="polite"></p>
+      <div class="controls">
+        <fieldset id="backgrounds">
+          <legend>배경</legend>
+        </fieldset>
+        <label class="toggle">
+          <input id="cycle" type="checkbox" />
+          3초마다 자동 순환
+        </label>
+      </div>
+    </main>
+  </body>
+</html>
