@@ -176,3 +176,41 @@ test("batch and background metadata stay bounded and contain no content", () => 
     false,
   );
 });
+test("interactivity and input fingerprints are bounded metadata", () => {
+  const fingerprint = "0123456789abcdef0123456789abcdef";
+  assert.equal(
+    isClaudeEvent({
+      ...event,
+      interactive: false,
+      inputFingerprint: fingerprint,
+    }),
+    true,
+  );
+  assert.equal(
+    isClaudeEvent({
+      ...event,
+      eventName: "PostToolUse",
+      toolUseId: "toolu_1",
+      inputFingerprint: fingerprint,
+    }),
+    true,
+  );
+  for (const invalid of [
+    fingerprint.toUpperCase(),
+    fingerprint.slice(1),
+    `${fingerprint}0`,
+    123,
+  ]) {
+    assert.equal(isClaudeEvent({ ...event, inputFingerprint: invalid }), false);
+  }
+  assert.equal(
+    isClaudeEvent({
+      eventName: "Stop",
+      sessionId: "session-1",
+      project: "p",
+      inputFingerprint: fingerprint,
+    }),
+    false,
+  );
+  assert.equal(isClaudeEvent({ ...event, interactive: "true" }), false);
+});

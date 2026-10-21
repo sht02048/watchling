@@ -33,6 +33,8 @@ export interface ClaudeEvent {
   childStatus?: "completed" | "async_launched";
   toolCalls?: { toolName: string; toolUseId: string }[];
   backgroundTasks?: { id: string; type: string; status: string }[];
+  interactive?: boolean;
+  inputFingerprint?: string;
 }
 export interface Endpoint {
   version: 1;
@@ -96,7 +98,15 @@ const fields = new Set([
   "childStatus",
   "toolCalls",
   "backgroundTasks",
+  "interactive",
+  "inputFingerprint",
 ]);
+const fingerprintedEvents = [
+  "PreToolUse",
+  "PermissionRequest",
+  "PostToolUse",
+  "PostToolUseFailure",
+];
 export function isClaudeEvent(value: unknown): value is ClaudeEvent {
   if (!isRecord(value) || Object.keys(value).some((key) => !fields.has(key)))
     return false;
@@ -112,7 +122,14 @@ export function isClaudeEvent(value: unknown): value is ClaudeEvent {
   for (const field of ["toolName", "permissionMode"]) {
     if (field in value && !isText(value[field], 128)) return false;
   }
-  for (const field of ["isInterrupt", "stopHookActive"]) {
+  if (
+    "inputFingerprint" in value &&
+    (!fingerprintedEvents.includes(String(value.eventName)) ||
+      typeof value.inputFingerprint !== "string" ||
+      !/^[0-9a-f]{32}$/.test(value.inputFingerprint))
+  )
+    return false;
+  for (const field of ["isInterrupt", "stopHookActive", "interactive"]) {
     if (field in value && typeof value[field] !== "boolean") return false;
   }
   if (
