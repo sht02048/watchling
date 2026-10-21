@@ -2,9 +2,9 @@
 
 ## Status
 
-Feasibility is **incomplete**. The product still exposes conservative `unknown` observations. No real human permission/question wait → attention → causal-clear round trip has passed. A hook candidate is not proof that a person is waiting.
+The documented command-hook interface and recorded trials do not supply a correlated human-wait/response pair for either path. Repeating the same trials cannot establish a missing event contract.
 
-The documented command-hook interface and recorded trials do not supply the required correlated human-wait/response pair for either path. Repeating the same trials cannot establish a missing event contract. Investigating a different integration requires an explicit owner decision; no heuristic attention or narrower interaction is substituted for the approved requirement.
+The owner therefore chose a read-only model in which `asking` means a prompt was probably shown, not that a person is confirmed to be waiting. The states, signals and clearing rules are defined in [`state-model.md`](state-model.md). The trials below remain the evidence for why `PermissionRequest` alone is not trusted: non-interactive sessions are filtered, and clears are correlated by tool-use ID or input fingerprint.
 
 Evidence boundaries:
 
