@@ -93,11 +93,10 @@ try {
     );
     await rm(diagnosticApp, { recursive: true, force: true });
     checkInterrupted();
-    await cp(
-      resolve(`build/pagent-darwin-${process.arch}/pagent.app`),
-      diagnosticApp,
-      { recursive: true, verbatimSymlinks: true },
-    );
+    await cp(resolve("build/unfused/mac-arm64/pagent.app"), diagnosticApp, {
+      recursive: true,
+      verbatimSymlinks: true,
+    });
     checkInterrupted();
     await cp(
       manifest.binaryPath,

@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
-const bundle = resolve(`build/pagent-darwin-${process.arch}/pagent.app`);
+const bundle = resolve("build/unfused/mac-arm64/pagent.app");
 const executable = join(bundle, "Contents/MacOS/pagent");
 const output = resolve("build/verification", `drive-${Date.now()}`);
 const home = await mkdtemp(join(tmpdir(), "pagent-drive-"));

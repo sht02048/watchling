@@ -31,7 +31,7 @@ if (
 const execute = promisify(execFile);
 const interactive = authorization === "--authorized-live-interactive-probe";
 const binary = resolve(
-  "build/pagent-darwin-arm64/pagent.app/Contents/MacOS/pagent",
+  "build/release/mac-arm64/pagent.app/Contents/MacOS/pagent",
 );
 const claude = await realpath(join(homedir(), ".local/bin/claude"));
 const sessionId = randomUUID();

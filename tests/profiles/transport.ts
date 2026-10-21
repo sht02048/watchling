@@ -2302,7 +2302,7 @@ export async function runProfiles(options: {
       );
     const packageDirectory = diagnosticNative
       ? `pagent-diagnostic-darwin-${process.arch}`
-      : `pagent-darwin-${process.arch}`;
+      : "unfused/mac-arm64";
     const executable = resolve(
       `build/${packageDirectory}/pagent.app/Contents/MacOS/pagent`,
     );

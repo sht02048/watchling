@@ -21,7 +21,7 @@ test("packaged hooks CLI preserves existing settings in disposable HOME", async 
   const home = await mkdtemp(join(tmpdir(), "pagent-packaged-"));
   const paths = resolveAppPaths(home);
   const executable = resolve(
-    `build/pagent-darwin-${process.arch}/pagent.app/Contents/MacOS/pagent`,
+    "build/release/mac-arm64/pagent.app/Contents/MacOS/pagent",
   );
   const original = {
     theme: "dark",
@@ -81,7 +81,7 @@ test("packaged apply refuses symlink and nonregular settings without changing ta
   const home = await mkdtemp(join(tmpdir(), "pagent-packaged-"));
   const paths = resolveAppPaths(home);
   const executable = resolve(
-    `build/pagent-darwin-${process.arch}/pagent.app/Contents/MacOS/pagent`,
+    "build/release/mac-arm64/pagent.app/Contents/MacOS/pagent",
   );
   const foreign = join(home, "foreign.json");
   const invoke = () =>

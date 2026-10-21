@@ -1,4 +1,4 @@
-import { packager } from "@electron/packager";
+import { Arch, Platform, build } from "electron-builder";
 import { execFileSync } from "node:child_process";
 import {
   chmod,
@@ -7,6 +7,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,6 +15,8 @@ import { join, resolve } from "node:path";
 
 if (process.platform !== "darwin")
   throw new Error("pagent v1 supports macOS only");
+if (process.arch !== "arm64")
+  throw new Error("pagent local builds support Apple silicon only");
 const manifest = JSON.parse(await readFile("package.json", "utf8"));
 const nativeBin = execFileSync(
   "swift",
@@ -27,41 +30,88 @@ const nativeBin = execFileSync(
   ],
   { encoding: "utf8" },
 ).trim();
+const releaseDirectory = resolve("build/release");
+const unfusedDirectory = resolve("build/unfused");
 const scratch = await mkdtemp(join(tmpdir(), "pagent-package-"));
 try {
   const directory = join(scratch, "app");
-  const helpers = join(scratch, "helpers");
   await mkdir(directory);
-  await mkdir(helpers);
   await cp("dist", join(directory, "dist"), { recursive: true });
   await writeFile(
     join(directory, "package.json"),
     JSON.stringify({
       name: manifest.name,
+      productName: "pagent",
       version: manifest.version,
+      description: manifest.description,
       private: true,
       type: "module",
       main: "dist/main/index.js",
     }),
   );
-  const helper = join(helpers, "pagent-hook-emitter");
+  const helper = join(scratch, "pagent-hook-emitter");
   await cp(join(nativeBin, "pagent-hook-emitter"), helper);
   await chmod(helper, 0o755);
-  const outputs = await packager({
-    dir: directory,
-    name: "pagent",
-    platform: "darwin",
-    arch: process.arch,
+  const config = (output, fused) => ({
+    appId: "local.pagent.desktop",
+    productName: "pagent",
     electronVersion: manifest.devDependencies.electron,
-    appBundleId: "local.pagent.desktop",
-    appCategoryType: "public.app-category.developer-tools",
+    directories: { app: directory, output },
+    files: ["dist/**/*", "package.json"],
     asar: true,
-    extraResource: [helpers],
-    out: resolve("build"),
-    overwrite: true,
-    prune: false,
+    npmRebuild: false,
+    nodeGypRebuild: false,
+    extraResources: [{ from: helper, to: "helpers/pagent-hook-emitter" }],
+    afterPack: (context) =>
+      chmod(
+        join(
+          context.appOutDir,
+          "pagent.app/Contents/Resources/helpers/pagent-hook-emitter",
+        ),
+        0o755,
+      ),
+    electronFuses: fused
+      ? {
+          runAsNode: false,
+          enableNodeOptionsEnvironmentVariable: false,
+          enableNodeCliInspectArguments: false,
+          enableEmbeddedAsarIntegrityValidation: true,
+          onlyLoadAppFromAsar: true,
+        }
+      : null,
+    mac: {
+      category: "public.app-category.developer-tools",
+      target: fused ? ["dmg", "dir"] : ["dir"],
+      identity: "-",
+      hardenedRuntime: false,
+      notarize: false,
+      extendInfo: { LSUIElement: true },
+    },
+    dmg: { artifactName: "pagent-${version}-${arch}.${ext}" },
+    publish: null,
   });
-  for (const output of outputs) console.log(output);
+  await rm(releaseDirectory, { recursive: true, force: true });
+  await rm(unfusedDirectory, { recursive: true, force: true });
+  // Playwright drives Electron through --inspect, which the production fuses
+  // disable, so automation uses a separate unfused build of the same app.
+  for (const [output, fused] of [
+    [releaseDirectory, true],
+    [unfusedDirectory, false],
+  ]) {
+    const artifacts = await build({
+      targets: Platform.MAC.createTarget(null, Arch.arm64),
+      config: config(output, fused),
+      publish: "never",
+    });
+    const helperPath = join(
+      output,
+      "mac-arm64/pagent.app/Contents/Resources/helpers/pagent-hook-emitter",
+    );
+    if (((await stat(helperPath)).mode & 0o7777) !== 0o755)
+      throw new Error("Packaged hook helper must have mode 0755");
+    for (const artifact of artifacts) console.log(artifact);
+    console.log(join(output, "mac-arm64/pagent.app"));
+  }
 } finally {
   await rm(scratch, { recursive: true, force: true });
 }
