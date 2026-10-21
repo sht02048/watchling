@@ -368,7 +368,7 @@ private func run(deadline: Deadline) {
     diagnosticTrace.record(.descriptorEnd)
     diagnosticTrace.record(.projectionBegin)
     #endif
-    guard let event = EventProjection.project(
+    guard var event = EventProjection.project(
         bytes, fingerprintKey: InputFingerprint.key(token: descriptor.token)
     ), deadline.isActive else {
         #if PAGENT_NATIVE_TRACE
@@ -380,6 +380,12 @@ private func run(deadline: Deadline) {
     #if PAGENT_NATIVE_TRACE
     diagnosticTrace.record(.projectionEnd)
     #endif
+    if event.eventName == "PermissionRequest" || event.eventName == "Notification" {
+        event.interactive = ProcessAncestry.interactivity(
+            environment: ProcessInfo.processInfo.environment, start: Darwin.getppid(),
+            table: DarwinProcessTable(), isActive: { deadline.isActive }
+        )
+    }
     emit(event, descriptor: descriptor, uid: uid, deadline: deadline)
 }
 

@@ -168,6 +168,7 @@ test("independent watchdog exits successfully while the main thread is blocked",
         "HookProtocol",
         "native/hook-emitter/Sources/HookProtocol/EventProjection.swift",
         "native/hook-emitter/Sources/HookProtocol/InputFingerprint.swift",
+        "native/hook-emitter/Sources/HookProtocol/ProcessAncestry.swift",
         "-emit-module-path",
         join(directory, "HookProtocol.swiftmodule"),
         "-o",
@@ -250,6 +251,94 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
       stalled.elapsed >= 120,
       "Live-endpoint probe must actually exercise the stdin deadline",
     );
+  } finally {
+    await collector.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("permission requests report whether the spawning Claude process is interactive", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pagent-emitter-test-"));
+  const events: ClaudeEvent[] = [];
+  const collector = await startCollector({
+    directory,
+    onEvent: (event) => events.push(event),
+    onLoss: () => assert.fail("Valid emitter delivery lost"),
+  });
+  const wrapper = join(directory, "claude-wrapper.mjs");
+  await writeFile(
+    wrapper,
+    `import { spawnSync } from "node:child_process";
+const [helper, descriptor, attended] = process.argv.slice(2);
+const env = { ...process.env, CLAUDE_PID: String(process.pid) };
+delete env.CLAUDE_CODE_SESSION_ATTENDED;
+if (attended !== "unset") env.CLAUDE_CODE_SESSION_ATTENDED = attended;
+const input = await new Promise((resolve) => {
+  const chunks = [];
+  process.stdin.on("data", (chunk) => chunks.push(chunk));
+  process.stdin.on("end", () => resolve(Buffer.concat(chunks)));
+});
+const result = spawnSync(
+  "/bin/sh",
+  ["-c", '"$0" --installation-id "$1" --descriptor "$2"', helper, "${randomUUID()}", descriptor],
+  { input, env },
+);
+process.stdout.write(result.stdout);
+process.stderr.write(result.stderr);
+process.exit(result.status ?? 1);
+`,
+  );
+  const secret = "pagent-permission-secret-81d7";
+  const permission = {
+    hook_event_name: "PermissionRequest",
+    session_id: "session-ask",
+    cwd: "/private/ask-project",
+    tool_name: "Bash",
+    tool_input: { command: secret, timeout: 5 },
+  };
+  try {
+    const { token } = JSON.parse(
+      await readFile(collector.descriptorPath, "utf8"),
+    ) as { token: string };
+    const cases: [string, string[], boolean][] = [
+      ["unset", [], true],
+      ["unset", ["-p"], false],
+      ["unset", ["--print=json"], false],
+      ["1", ["-p"], true],
+      ["0", [], false],
+    ];
+    for (const [attended, flags, interactive] of cases) {
+      events.length = 0;
+      const result = await run(
+        collector.descriptorPath,
+        JSON.stringify(permission),
+        [wrapper, binary, collector.descriptorPath, attended, ...flags],
+        process.execPath,
+      );
+      assert.equal(result.code, 0);
+      assert.equal(result.stdout, "");
+      assert.equal(result.stderr, "");
+      for (let i = 0; i < 100 && events.length === 0; i++) await delay(5);
+      assert.deepEqual(
+        events,
+        [
+          {
+            eventName: "PermissionRequest",
+            sessionId: "session-ask",
+            project: "ask-project",
+            toolName: "Bash",
+            inputFingerprint: fingerprint(
+              token,
+              permission.tool_name,
+              permission.tool_input,
+            ),
+            interactive,
+          },
+        ],
+        `${attended} ${flags.join(" ")}`,
+      );
+      assert.equal(JSON.stringify(events).includes(secret), false);
+    }
   } finally {
     await collector.close();
     await rm(directory, { recursive: true, force: true });

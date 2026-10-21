@@ -464,6 +464,7 @@ async function compileFixture(name: string, source: string) {
       "HookProtocol",
       "native/hook-emitter/Sources/HookProtocol/EventProjection.swift",
       "native/hook-emitter/Sources/HookProtocol/InputFingerprint.swift",
+      "native/hook-emitter/Sources/HookProtocol/ProcessAncestry.swift",
       "-emit-module-path",
       join(fixtureDirectory, "HookProtocol.swiftmodule"),
       "-o",
