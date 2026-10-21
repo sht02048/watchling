@@ -58,6 +58,7 @@ let pet: BrowserWindow | undefined;
 let list: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
+let dragTimer: ReturnType<typeof setInterval> | undefined;
 let detachIpc: (() => void) | undefined;
 let store: PositionStore | undefined;
 let collector: Awaited<ReturnType<typeof startCollector>> | undefined;
@@ -66,7 +67,8 @@ let quitting = false;
 let quitFlushed = false;
 let cleanupStarted = false;
 let startup: Promise<void> | undefined;
-let dragging: { cursor: Point; origin: Point; moved: boolean } | undefined;
+let dragging:
+  { cursor: Point; origin: Point; moved: boolean; last?: Point } | undefined;
 let hit = false;
 let ignoring = true;
 const observations = new Observations();
@@ -116,10 +118,14 @@ function updateDrag(cursor: Point): void {
     area,
     size,
   );
+  if (dragging.last?.x === position.x && dragging.last.y === position.y) return;
+  dragging.last = position;
   pet.setPosition(position.x, position.y);
 }
 
 function endDrag(): void {
+  if (dragTimer) clearInterval(dragTimer);
+  dragTimer = undefined;
   if (dragging) updateDrag(screen.getCursorScreenPoint());
   if (dragging?.moved && pet && !pet.isDestroyed()) {
     const { x, y } = pet.getBounds();
@@ -274,6 +280,10 @@ async function start(options: DesktopOptions): Promise<void> {
       )
         return;
       dragging = { cursor, origin: { x: bounds.x, y: bounds.y }, moved: false };
+      dragTimer = setInterval(
+        () => updateDrag(screen.getCursorScreenPoint()),
+        8,
+      );
       list?.hide();
       updateInput();
     },
