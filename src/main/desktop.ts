@@ -11,7 +11,12 @@ import {
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Point, Snapshot } from "../shared/ui-contract.ts";
+import {
+  stateLabels,
+  type Point,
+  type SemanticState,
+  type Snapshot,
+} from "../shared/ui-contract.ts";
 import { Observations } from "../domain/observations.ts";
 import {
   startCollector,
@@ -64,6 +69,13 @@ let hit = false;
 let ignoring = true;
 const observations = new Observations();
 let snapshot = observations.snapshot();
+let trayState: SemanticState | undefined;
+
+function updateTray(): void {
+  if (!tray || tray.isDestroyed() || trayState === snapshot.state) return;
+  trayState = snapshot.state;
+  tray.setToolTip(`pagent — ${stateLabels[trayState]}`);
+}
 
 function queueSnapshot(): void {
   if (!quitting) publisher?.request();
@@ -289,7 +301,7 @@ async function start(options: DesktopOptions): Promise<void> {
   const icon = nativeImage.createFromBitmap(bitmap, { width: 18, height: 18 });
   icon.setTemplateImage(true);
   tray = new Tray(icon);
-  tray.setToolTip("pagent — 확인 불가");
+  updateTray();
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "펫 표시", click: showPet },
@@ -303,6 +315,7 @@ async function start(options: DesktopOptions): Promise<void> {
       const finishTrace = options.trace?.("snapshot.materialize");
       try {
         snapshot = observations.snapshot();
+        updateTray();
         return snapshot;
       } finally {
         finishTrace?.();
@@ -352,7 +365,7 @@ async function start(options: DesktopOptions): Promise<void> {
       },
     });
   } catch {
-    observations.loseIntegrity();
+    observations.receiverFailed();
     queueSnapshot();
     console.error("Private Claude event receiver could not start");
   }

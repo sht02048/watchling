@@ -8,9 +8,18 @@
 * {
   box-sizing: border-box;
 }
+html,
+body {
+  height: 100%;
+}
 body {
   margin: 0;
   padding: 18px;
+  display: flex;
+  flex-direction: column;
+}
+#observation {
+  margin: 8px 0 0;
 }
 header {
   display: flex;
@@ -36,8 +45,33 @@ button:focus-visible {
   outline-offset: 2px;
 }
 ul {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 10px 0;
   padding: 0;
   list-style: none;
+}
+li div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.state {
+  flex: none;
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: #e8e9e1;
+}
+.state-asking {
+  color: #7a4b12;
+  background: #f6e3c4;
+}
+.state-unknown {
+  color: #5b5f66;
+  background: #e3e4e8;
 }
 li {
   padding: 10px 0;

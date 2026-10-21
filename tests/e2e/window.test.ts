@@ -226,12 +226,16 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
         {
           id: "fixture-",
           project: "fixture-project",
-          state: "unknown",
-          reason:
-            "신호는 수신했지만 실제 대기·해제 경로 검증은 아직 완료되지 않았어요.",
+          state: "idle",
+          reason: "세션이 열렸고 아직 요청은 없어요.",
         },
       ]);
-    await expect(sessionPage!.locator("body")).toContainText("fixture-project");
+    await expect(sessionPage!.locator("body")).toContainText(
+      "fixture-project · fixture-",
+    );
+    await expect(sessionPage!.locator("#sessions .state")).toHaveText(
+      stateLabels.idle,
+    );
     await expect(sessionPage!.locator("body")).not.toContainText(
       "must-not-leak",
     );
