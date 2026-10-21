@@ -110,6 +110,18 @@ final class FingerprintTests: XCTestCase {
         )?.inputFingerprint)
     }
 
+    func testLargeOrWideInputOmitsFingerprintWithinBudget() throws {
+        let wide = try payload("PermissionRequest", input: Array(repeating: [Int](), count: 20_000))
+        let large = try payload("PermissionRequest", input: ["text": String(repeating: "x", count: 70_000)])
+        for data in [wide, large] {
+            let start = Date()
+            let event = EventProjection.project(data, fingerprintKey: key)
+            XCTAssertNotNil(event)
+            XCTAssertNil(event?.inputFingerprint)
+            XCTAssertLessThan(Date().timeIntervalSince(start), 0.1)
+        }
+    }
+
     func testNonToolEventsAndKeylessProjectionOmitFingerprint() throws {
         let stop = try XCTUnwrap(EventProjection.project(
             try payload("Stop", input: ["command": "ls"]), fingerprintKey: key

@@ -33,12 +33,15 @@ public struct ClaudeEvent: Encodable, Equatable, Sendable {
 
 public enum EventProjection {
     public static let maximumInputBytes = 1_048_576
+    public static let maximumFingerprintedInputBytes = 65_536
 
     // Only this allowlisted value escapes decoding; raw hook payloads are never retained.
     public static func project(_ data: Data, fingerprintKey: Data? = nil) -> ClaudeEvent? {
         guard data.count <= maximumInputBytes else { return nil }
         let decoder = JSONDecoder()
-        if let fingerprintKey { decoder.userInfo[DecodedProjection.fingerprintKey] = fingerprintKey }
+        if let fingerprintKey, data.count <= maximumFingerprintedInputBytes {
+            decoder.userInfo[DecodedProjection.fingerprintKey] = fingerprintKey
+        }
         return try? decoder.decode(DecodedProjection.self, from: data).event
     }
 }

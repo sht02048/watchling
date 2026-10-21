@@ -11,6 +11,11 @@ public enum CanonicalJSON: Decodable, Equatable, Sendable {
     case object([String: CanonicalJSON])
 
     public static let maximumDepth = 64
+    public static let maximumNodes = 10_000
+
+    private final class Budget {
+        var remaining = CanonicalJSON.maximumNodes
+    }
 
     private struct Key: CodingKey {
         let stringValue: String
@@ -20,16 +25,17 @@ public enum CanonicalJSON: Decodable, Equatable, Sendable {
         init?(intValue: Int) { return nil }
     }
 
-    private enum DepthError: Error {
+    private enum LimitError: Error {
         case exceeded
     }
 
     public init(from decoder: Decoder) throws {
-        try self.init(from: decoder, depth: 0)
+        try self.init(from: decoder, depth: 0, budget: Budget())
     }
 
-    private init(from decoder: Decoder, depth: Int) throws {
-        guard depth < Self.maximumDepth else { throw DepthError.exceeded }
+    private init(from decoder: Decoder, depth: Int, budget: Budget) throws {
+        budget.remaining -= 1
+        guard depth < Self.maximumDepth, budget.remaining >= 0 else { throw LimitError.exceeded }
         let single = try decoder.singleValueContainer()
         if single.decodeNil() {
             self = .null
@@ -44,7 +50,7 @@ public enum CanonicalJSON: Decodable, Equatable, Sendable {
         } else if var items = try? decoder.unkeyedContainer() {
             var values: [CanonicalJSON] = []
             while !items.isAtEnd {
-                values.append(try CanonicalJSON(from: items.superDecoder(), depth: depth + 1))
+                values.append(try CanonicalJSON(from: items.superDecoder(), depth: depth + 1, budget: budget))
             }
             self = .array(values)
         } else {
@@ -52,7 +58,7 @@ public enum CanonicalJSON: Decodable, Equatable, Sendable {
             var values: [String: CanonicalJSON] = [:]
             for key in fields.allKeys {
                 values[key.stringValue] = try CanonicalJSON(
-                    from: fields.superDecoder(forKey: key), depth: depth + 1
+                    from: fields.superDecoder(forKey: key), depth: depth + 1, budget: budget
                 )
             }
             self = .object(values)
