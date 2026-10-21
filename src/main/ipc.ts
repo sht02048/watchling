@@ -1,0 +1,92 @@
+import { ipcMain } from "electron";
+import type { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent } from "electron";
+import type { Snapshot } from "../shared/ui-contract.ts";
+
+type Request = IpcMainEvent | IpcMainInvokeEvent;
+export function ownsFrame(
+  event: Request,
+  window: BrowserWindow,
+  role: "pet" | "sessions",
+): boolean {
+  return (
+    !window.isDestroyed() &&
+    event.sender === window.webContents &&
+    event.senderFrame === window.webContents.mainFrame &&
+    event.senderFrame.url === `pagent://app/${role}/index.html`
+  );
+}
+
+export function attachIpc(options: {
+  pet: BrowserWindow;
+  list: BrowserWindow;
+  snapshot: () => Snapshot;
+  hit: (value: boolean) => void;
+  beginDrag: () => void;
+  endDrag: () => void;
+  openList: () => void;
+  closeList: () => void;
+}): () => void {
+  const listeners: [
+    string,
+    (event: IpcMainEvent, ...args: unknown[]) => void,
+  ][] = [];
+  let windowStart = 0;
+  let messages = 0;
+  const allow = (): boolean => {
+    const now = performance.now();
+    if (now - windowStart >= 1000) {
+      windowStart = now;
+      messages = 0;
+    }
+    return ++messages <= 120;
+  };
+  ipcMain.handle("pagent:snapshot", (event, ...args: unknown[]) => {
+    if (
+      args.length !== 0 ||
+      !allow() ||
+      !(
+        ownsFrame(event, options.pet, "pet") ||
+        ownsFrame(event, options.list, "sessions")
+      )
+    ) {
+      throw new Error("Unauthorized snapshot request");
+    }
+    return options.snapshot();
+  });
+  function listen(
+    channel: string,
+    role: "pet" | "sessions",
+    handler: (...args: unknown[]) => void,
+  ): void {
+    const listener = (event: IpcMainEvent, ...args: unknown[]): void => {
+      if (
+        !ownsFrame(event, role === "pet" ? options.pet : options.list, role) ||
+        !allow()
+      )
+        return;
+      handler(...args);
+    };
+    ipcMain.on(channel, listener);
+    listeners.push([channel, listener]);
+  }
+  listen("pagent:pet-hit", "pet", (...args) => {
+    if (args.length === 1 && typeof args[0] === "boolean") options.hit(args[0]);
+  });
+  for (const [channel, handler] of [
+    ["pagent:drag-start", options.beginDrag],
+    ["pagent:drag-end", options.endDrag],
+    ["pagent:list-open", options.openList],
+  ] as const) {
+    listen(channel, "pet", (...args) => {
+      if (args.length === 0) handler();
+    });
+  }
+  listen("pagent:list-close", "sessions", (...args) => {
+    if (args.length === 0) options.closeList();
+  });
+  return () => {
+    ipcMain.removeHandler("pagent:snapshot");
+    for (const [channel, listener] of listeners)
+      ipcMain.removeListener(channel, listener);
+  };
+}

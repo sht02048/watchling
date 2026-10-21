@@ -1,0 +1,467 @@
+/* Adapted from minsug.me/src/components/PetFigure.astro.
+ * Original seeded silhouette, OKLab palette, spring motion and Canvas shading.
+ * No session/provider/DOM-panel knowledge belongs in this module.
+ */
+import type { SemanticState } from "../../shared/ui-contract.ts";
+
+type OKLab = [number, number, number];
+
+interface Pose {
+  amp: number;
+  speed: number;
+  sx: number;
+  sy: number;
+  sit: number;
+  eye: number;
+  lookX: number;
+  lookY: number;
+  breathe: number;
+  pulse: number;
+  sway: number;
+  field: number;
+  wave: number;
+  rot: number;
+  droop: number;
+}
+
+interface Figure extends Pose {
+  t: number;
+  phase: number;
+  rotPhase: number;
+  tilt: number;
+  offX: number;
+  offY: number;
+  c1: OKLab;
+  c2: OKLab;
+}
+
+interface Spring {
+  v: number;
+  vel: number;
+  target: number;
+}
+
+type ColorSprings = [Spring, Spring, Spring];
+
+const TAU = Math.PI * 2;
+const CORE = 0.8;
+const SHAPE = {
+  seed: 163674600,
+  count: 9,
+  length: 0.27,
+  concave: 1,
+  tip: 0.4,
+  secondary: 0.21,
+  jitter: 0.06,
+  spin: 0.65,
+  eyeScale: 1.1,
+};
+const IDLE: Pose = {
+  amp: 0.03,
+  speed: 0.6,
+  sx: 1,
+  sy: 1,
+  sit: 1,
+  eye: 1,
+  lookX: 0,
+  lookY: 0,
+  breathe: 1,
+  pulse: 0,
+  sway: 0,
+  field: 0.6,
+  wave: 0.08,
+  rot: 0.05,
+  droop: 0,
+};
+const POSES: Record<SemanticState, Pose> = {
+  idle: IDLE,
+  working: {
+    ...IDLE,
+    amp: 0.042,
+    speed: 1.6,
+    sx: 1.02,
+    sy: 0.98,
+    eye: 0.6,
+    lookY: 0.3,
+    breathe: 0,
+    pulse: 0.55,
+    field: 0.95,
+    wave: 0.6,
+    rot: 0.3,
+  },
+  attention: {
+    ...IDLE,
+    amp: 0.035,
+    speed: 0.8,
+    sx: 0.96,
+    sy: 1.07,
+    sit: 0.7,
+    eye: 1.35,
+    lookY: -0.7,
+    breathe: 0.7,
+    sway: 0.65,
+    field: 0.85,
+    wave: 0.16,
+    rot: 0.08,
+  },
+  unknown: {
+    ...IDLE,
+    amp: 0.018,
+    speed: 0.25,
+    eye: 0.75,
+    lookX: -0.4,
+    lookY: -0.2,
+    breathe: 0.65,
+    field: 0.35,
+    wave: 0,
+    rot: 0.01,
+  },
+};
+const POSE_KEYS = Object.keys(IDLE) as (keyof Pose)[];
+const COLOR_CHANNELS = [0, 1, 2] as const;
+const lch = (l: number, c: number, h: number): OKLab => [
+  l,
+  c * Math.cos((h * Math.PI) / 180),
+  c * Math.sin((h * Math.PI) / 180),
+];
+const PALETTE: Record<SemanticState, readonly [OKLab, OKLab]> = {
+  idle: [lch(0.88, 0.07, 60), lch(0.74, 0.14, 25)],
+  working: [lch(0.88, 0.07, 215), lch(0.7, 0.12, 255)],
+  attention: [lch(0.92, 0.1, 85), lch(0.76, 0.16, 45)],
+  unknown: [lch(0.87, 0.025, 295), lch(0.72, 0.045, 285)],
+};
+const HARMONICS: readonly (readonly [number, number, number, number])[] = [
+  [2, 0.55, 1, 0],
+  [3, 0.35, -1.3, 1.7],
+  [4, 0.25, 1.7, 4.1],
+  [5, 0.15, -2.3, 2.2],
+];
+const wobble = (theta: number, phase: number): number =>
+  HARMONICS.reduce(
+    (sum, [k, a, w, p]) => sum + a * Math.sin(k * theta + phase * w + p),
+    0,
+  );
+
+function mulberry32(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const random = mulberry32(SHAPE.seed);
+const SPIKES = Array.from({ length: 64 }, () => random() * 2 - 1);
+const ROT0 = random() * TAU;
+
+function rgb([l, a, b]: OKLab, alpha = 1): string {
+  const ll = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const mm = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const ss = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const channels = [
+    4.0767416621 * ll - 3.3077115913 * mm + 0.2309699292 * ss,
+    -1.2684380046 * ll + 2.6097574011 * mm - 0.3413193965 * ss,
+    -0.0041960863 * ll - 0.7034186147 * mm + 1.707614701 * ss,
+  ].map((x) => {
+    const v =
+      x <= 0.0031308 ? 12.92 * x : 1.055 * Math.max(x, 0) ** (1 / 2.4) - 0.055;
+    return Math.round(Math.min(1, Math.max(0, v)) * 255);
+  });
+  return `rgba(${channels.join(",")},${alpha})`;
+}
+
+function toScreen(f: Figure, u: number, v: number): [number, number] {
+  const x = u * f.sx,
+    y = v * f.sy * (v > 0 ? 1 - 0.1 * f.sit : 1);
+  const c = Math.cos(f.tilt),
+    s = Math.sin(f.tilt);
+  return [x * c - y * s + f.offX, x * s + y * c + f.offY];
+}
+
+function profile(x: number): number {
+  const { tip, concave } = SHAPE;
+  const s =
+    (Math.sqrt(x * x + tip * tip) - tip) / (Math.sqrt(1 + tip * tip) - tip);
+  return Math.max(0, 1 - s) ** concave;
+}
+
+function spikeLength(f: Figure, index: number, theta: number): number {
+  const base =
+    SHAPE.length * f.field * (1 + SHAPE.jitter * SPIKES[index % 64]!);
+  return Math.max(
+    0,
+    base *
+      (1 + f.wave * 0.35 * Math.sin(f.t * 6 - index * 0.9)) *
+      (1 - f.droop * 0.7 * (0.5 - 0.5 * Math.sin(theta))),
+  );
+}
+
+function spikeRadius(f: Figure, theta: number): number {
+  const n = SHAPE.count,
+    step = TAU / n;
+  const t =
+    theta - f.rotPhase * SHAPE.spin - ROT0 - f.droop * 0.35 * Math.cos(theta);
+  const wrap = (i: number): number => ((i % n) + n) % n;
+  const i = Math.round(t / step),
+    t2 = t - step / 2,
+    i2 = Math.round(t2 / step);
+  return Math.max(
+    profile((t - i * step) / (step / 2)) * spikeLength(f, wrap(i), theta),
+    profile((t2 - i2 * step) / (step / 2)) *
+      spikeLength(f, wrap(i2) + 32, theta) *
+      SHAPE.secondary,
+  );
+}
+
+function traceBody(f: Figure, r: number): Path2D {
+  const body = new Path2D();
+  for (let i = 0; i <= 480; i++) {
+    const theta = (i / 480) * TAU;
+    const radius =
+      CORE * (1 + f.amp * wobble(theta, f.phase)) + spikeRadius(f, theta);
+    const [x, y] = toScreen(
+      f,
+      Math.cos(theta) * radius,
+      Math.sin(theta) * radius,
+    );
+    if (i === 0) body.moveTo(x * r, y * r);
+    else body.lineTo(x * r, y * r);
+  }
+  body.closePath();
+  return body;
+}
+
+function drawEyes(ctx: CanvasRenderingContext2D, f: Figure, r: number): void {
+  const k = r * SHAPE.eyeScale * CORE;
+  ctx.fillStyle = ctx.strokeStyle = "rgba(25,28,29,.84)";
+  ctx.lineCap = "round";
+  for (const side of [-1, 1]) {
+    const u = (side * 0.3 + f.lookX * 0.1) * SHAPE.eyeScale * CORE;
+    const v = (-0.1 + f.lookY * 0.1) * SHAPE.eyeScale * CORE;
+    const [x, y] = toScreen(f, u, v);
+    ctx.beginPath();
+    ctx.ellipse(
+      x * r,
+      y * r,
+      0.085 * k,
+      Math.max(0.018, 0.13 * f.eye) * k,
+      f.tilt,
+      0,
+      TAU,
+    );
+    ctx.fill();
+  }
+}
+
+function draw(
+  ctx: CanvasRenderingContext2D,
+  f: Figure,
+  width: number,
+  height: number,
+  ratio: number,
+): Path2D | null {
+  const r = Math.min(width, height) * 0.3;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  if (r <= 0 || ctx.canvas.width === 0 || ctx.canvas.height === 0) return null;
+  ctx.translate(width / 2, height * 0.52);
+  const body = traceBody(f, r);
+  ctx.save();
+  ctx.shadowColor = rgb(f.c2, 0.42);
+  ctx.shadowBlur = r * 0.45 * ratio;
+  ctx.shadowOffsetY = r * 0.08 * ratio;
+  ctx.fillStyle = rgb(f.c1);
+  ctx.fill(body);
+  ctx.restore();
+  ctx.save();
+  ctx.clip(body);
+  const ox = f.offX * r,
+    oy = f.offY * r;
+  for (let i = 0; i < 3; i++) {
+    const a = f.phase * (0.7 + i * 0.25) + (i * TAU) / 3;
+    const bx = ox + Math.cos(a) * r * 0.45,
+      by = oy + (Math.sin(a) * 0.4 + 0.15) * r;
+    const color: OKLab = i === 1 ? [f.c2[0] + 0.06, f.c2[1], f.c2[2]] : f.c2;
+    const glow = ctx.createRadialGradient(bx, by, 0, bx, by, r * 0.95);
+    glow.addColorStop(0, rgb(color, 0.85));
+    glow.addColorStop(1, rgb(color, 0));
+    ctx.fillStyle = glow;
+    ctx.fillRect(-r * 2, -r * 2, r * 4, r * 4);
+  }
+  const highlight = ctx.createRadialGradient(
+    ox - r * 0.25,
+    oy - r * 0.42,
+    0,
+    ox - r * 0.25,
+    oy - r * 0.42,
+    r * 0.6,
+  );
+  highlight.addColorStop(0, "rgba(255,255,255,.55)");
+  highlight.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = highlight;
+  ctx.fillRect(-r * 2, -r * 2, r * 4, r * 4);
+  ctx.restore();
+  drawEyes(ctx, f, r);
+  return body;
+}
+
+function spring(v: number): Spring {
+  return { v, vel: 0, target: v };
+}
+
+function colorSprings(color: OKLab): ColorSprings {
+  return [spring(color[0]), spring(color[1]), spring(color[2])];
+}
+
+function pixelRatio(): number {
+  return Math.min(window.devicePixelRatio || 1, 2);
+}
+
+export function createPet(canvas: HTMLCanvasElement): {
+  setState(state: SemanticState): void;
+  hitTest(x: number, y: number): boolean;
+  destroy(): void;
+} {
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Canvas 2D is required to display the pet.");
+  const ctx = context;
+  const initial = POSES.unknown;
+  const params: Record<keyof Pose, Spring> = {
+    amp: spring(initial.amp),
+    speed: spring(initial.speed),
+    sx: spring(initial.sx),
+    sy: spring(initial.sy),
+    sit: spring(initial.sit),
+    eye: spring(initial.eye),
+    lookX: spring(initial.lookX),
+    lookY: spring(initial.lookY),
+    breathe: spring(initial.breathe),
+    pulse: spring(initial.pulse),
+    sway: spring(initial.sway),
+    field: spring(initial.field),
+    wave: spring(initial.wave),
+    rot: spring(initial.rot),
+    droop: spring(initial.droop),
+  };
+  const c1 = colorSprings(PALETTE.unknown[0]);
+  const c2 = colorSprings(PALETTE.unknown[1]);
+  const springs = [...Object.values(params), ...c1, ...c2];
+  const figure: Figure = {
+    ...initial,
+    t: 0,
+    phase: 0,
+    rotPhase: 0,
+    tilt: 0,
+    offX: 0,
+    offY: 0,
+    c1: [...PALETTE.unknown[0]],
+    c2: [...PALETTE.unknown[1]],
+  };
+  let frame: number | null = null;
+  let previous = 0;
+  let width = 0;
+  let height = 0;
+  let ratio = 1;
+  let body: Path2D | null = null;
+  let destroyed = false;
+
+  function render(): void {
+    for (const key of POSE_KEYS) figure[key] = params[key].v;
+    const blink = Math.max(0, 1 - Math.abs((figure.t % 4.1) - 3.8) / 0.08);
+    const stretch =
+      1 +
+      figure.breathe * 0.022 * Math.sin(figure.t * 1.7) +
+      figure.pulse * 0.045 * Math.sin(figure.t * 9);
+    figure.sx /= Math.sqrt(stretch);
+    figure.sy *= stretch;
+    figure.tilt = figure.sway * 0.1 * Math.sin(figure.t * 0.9);
+    figure.eye *= 1 - blink * 0.92;
+    for (const channel of COLOR_CHANNELS) {
+      figure.c1[channel] = c1[channel].v;
+      figure.c2[channel] = c2[channel].v;
+    }
+    body = draw(ctx, figure, width, height, ratio);
+  }
+
+  function resize(): void {
+    if (destroyed) return;
+    const box = canvas.getBoundingClientRect();
+    width = box.width;
+    height = box.height;
+    ratio = pixelRatio();
+    const pixelWidth = Math.round(width * ratio);
+    const pixelHeight = Math.round(height * ratio);
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    render();
+  }
+
+  function tick(now: number): void {
+    frame = null;
+    if (destroyed) return;
+    const dt = Math.min(1 / 30, (now - previous) / 1000);
+    previous = now;
+    const k = (TAU / 0.6) ** 2,
+      c = (4 * Math.PI * 0.85) / 0.6;
+    for (let i = 0; i < 4; i++) {
+      for (const s of springs) {
+        s.vel += ((k * (s.target - s.v) - c * s.vel) * dt) / 4;
+        s.v += (s.vel * dt) / 4;
+      }
+    }
+    figure.t += dt;
+    figure.phase += params.speed.v * dt;
+    figure.rotPhase += params.rot.v * dt;
+    if (pixelRatio() !== ratio) resize();
+    else render();
+    frame = requestAnimationFrame(tick);
+  }
+
+  const observer = new ResizeObserver(resize);
+  observer.observe(canvas);
+  resize();
+  previous = performance.now();
+  frame = requestAnimationFrame(tick);
+
+  return {
+    setState(state: SemanticState): void {
+      if (destroyed) return;
+      for (const key of POSE_KEYS) params[key].target = POSES[state][key];
+      for (const channel of COLOR_CHANNELS) {
+        c1[channel].target = PALETTE[state][0][channel];
+        c2[channel].target = PALETTE[state][1][channel];
+      }
+      render();
+    },
+    hitTest(x: number, y: number): boolean {
+      if (
+        destroyed ||
+        !body ||
+        !Number.isFinite(x) ||
+        !Number.isFinite(y) ||
+        x < 0 ||
+        y < 0 ||
+        x >= width ||
+        y >= height
+      ) {
+        return false;
+      }
+      // The drawn path is body-local CSS pixels; neither DPR nor shadow is a hit.
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const hit = ctx.isPointInPath(body, x - width / 2, y - height * 0.52);
+      ctx.restore();
+      return hit;
+    },
+    destroy(): void {
+      if (destroyed) return;
+      destroyed = true;
+      if (frame !== null) cancelAnimationFrame(frame);
+      frame = null;
+      body = null;
+      observer.disconnect();
+    },
+  };
+}
