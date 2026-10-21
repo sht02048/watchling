@@ -490,10 +490,19 @@ test("helper events drive session states through the collector", async () => {
   ];
   try {
     for (const [index, [payload, attended, expected]] of steps.entries()) {
-      if (attended === undefined)
-        delete process.env.CLAUDE_CODE_SESSION_ATTENDED;
-      else process.env.CLAUDE_CODE_SESSION_ATTENDED = attended;
-      safe(await run(collector.descriptorPath, JSON.stringify(payload)));
+      const env = { ...process.env };
+      delete env.CLAUDE_PID;
+      delete env.CLAUDE_CODE_SESSION_ATTENDED;
+      if (attended !== undefined) env.CLAUDE_CODE_SESSION_ATTENDED = attended;
+      safe(
+        await run(
+          collector.descriptorPath,
+          JSON.stringify(payload),
+          undefined,
+          binary,
+          env,
+        ),
+      );
       for (let i = 0; i < 400 && received <= index; i++) await delay(5);
       assert.equal(received, index + 1, String(payload.hook_event_name));
       const snapshot = observations.snapshot();

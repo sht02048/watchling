@@ -606,3 +606,27 @@ test("sessions first seen mid-turn after a loss start unknown", () => {
   feed(observations, event("UserPromptSubmit", { sessionId: "late" }));
   assert.equal(stateOf(observations, "late"), "working");
 });
+
+test("ended-session memory is bounded and forgets the oldest first", () => {
+  const observations = new Observations();
+  for (let i = 0; i <= 256; i++)
+    feed(observations, event("SessionEnd", { sessionId: `ended-${i}` }));
+  feed(
+    observations,
+    event("PreToolUse", {
+      sessionId: "ended-0",
+      toolName: "Bash",
+      toolUseId: "t",
+    }),
+    event("PreToolUse", {
+      sessionId: "ended-1",
+      toolName: "Bash",
+      toolUseId: "t",
+    }),
+  );
+  assert.deepEqual(
+    observations.snapshot().sessions.map((row) => row.project),
+    ["project"],
+  );
+  assert.equal(stateOf(observations, "ended-0"), "working");
+});
