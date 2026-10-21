@@ -26,16 +26,18 @@
           <figcaption>2배</figcaption>
         </figure>
       </section>
-      <nav id="states" aria-label="상태"></nav>
+      <div class="state-bar">
+        <nav id="states" aria-label="상태"></nav>
+        <label>
+          <input id="cycle" type="checkbox" />
+          3초마다 자동 순환
+        </label>
+      </div>
       <p id="description" aria-live="polite"></p>
       <div class="controls">
         <fieldset id="backgrounds">
           <legend>배경</legend>
         </fieldset>
-        <label class="toggle">
-          <input id="cycle" type="checkbox" />
-          3초마다 자동 순환
-        </label>
       </div>
     </main>
   </body>

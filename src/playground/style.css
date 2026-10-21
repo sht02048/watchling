@@ -77,11 +77,19 @@ figcaption {
   color: var(--muted);
   font-size: 12px;
 }
+.state-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
 #states {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
 }
 button {
   display: inline-flex;
