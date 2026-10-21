@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { startCollector } from "../../src/integration/claude/collector.ts";
+import { Observations } from "../../src/domain/observations.ts";
 import {
   isEpoch,
   type ClaudeEvent,
@@ -407,6 +408,108 @@ test("unsafe descriptors/socket links and oversized projections never deliver", 
     safe(await run(collector.descriptorPath, "{broken"));
     assert.deepEqual(events, []);
   } finally {
+    await collector.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("helper events drive session states through the collector", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pagent-pipeline-test-"));
+  const observations = new Observations();
+  let received = 0;
+  const collector = await startCollector({
+    directory,
+    onEvent: (event) => {
+      observations.receive(event);
+      received++;
+    },
+    onLoss: () => assert.fail("Valid emitter delivery lost"),
+  });
+  const saved = {
+    attended: process.env.CLAUDE_CODE_SESSION_ATTENDED,
+    pid: process.env.CLAUDE_PID,
+  };
+  const base = { session_id: "pipeline-a", cwd: "/private/파이프라인" };
+  const input = { command: "printf pagent-pipeline-secret-7d1e" };
+  const steps: [Record<string, unknown>, string | undefined, string][] = [
+    [{ ...base, hook_event_name: "SessionStart" }, undefined, "idle"],
+    [{ ...base, hook_event_name: "UserPromptSubmit" }, undefined, "working"],
+    [
+      {
+        ...base,
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_use_id: "toolu_pipeline",
+        tool_input: input,
+      },
+      undefined,
+      "working",
+    ],
+    [
+      {
+        ...base,
+        hook_event_name: "PermissionRequest",
+        tool_name: "Bash",
+        tool_input: { ...input },
+      },
+      "1",
+      "asking",
+    ],
+    [
+      {
+        ...base,
+        hook_event_name: "PostToolUse",
+        tool_name: "Bash",
+        tool_use_id: "toolu_pipeline",
+        tool_input: input,
+        tool_response: { stdout: "pagent-pipeline-secret-7d1e" },
+      },
+      undefined,
+      "working",
+    ],
+    [
+      {
+        session_id: "pipeline-b",
+        cwd: "/private/파이프라인",
+        hook_event_name: "PermissionRequest",
+        tool_name: "Bash",
+        tool_input: input,
+      },
+      "0",
+      "working",
+    ],
+    [{ ...base, hook_event_name: "Stop" }, undefined, "done"],
+    [{ ...base, hook_event_name: "SessionEnd" }, undefined, "idle"],
+  ];
+  try {
+    delete process.env.CLAUDE_PID;
+    for (const [index, [payload, attended, expected]] of steps.entries()) {
+      if (attended === undefined)
+        delete process.env.CLAUDE_CODE_SESSION_ATTENDED;
+      else process.env.CLAUDE_CODE_SESSION_ATTENDED = attended;
+      safe(await run(collector.descriptorPath, JSON.stringify(payload)));
+      for (let i = 0; i < 100 && received <= index; i++) await delay(5);
+      assert.equal(received, index + 1, String(payload.hook_event_name));
+      const snapshot = observations.snapshot();
+      assert.equal(snapshot.state, expected, String(payload.hook_event_name));
+      assert.ok(
+        snapshot.sessions.every(
+          (session) => session.state !== "asking" || attended === "1",
+        ),
+      );
+      assert.equal(
+        JSON.stringify(snapshot).includes("pagent-pipeline-secret"),
+        false,
+      );
+    }
+  } finally {
+    for (const [key, value] of [
+      ["CLAUDE_CODE_SESSION_ATTENDED", saved.attended],
+      ["CLAUDE_PID", saved.pid],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
     await collector.close();
     await rm(directory, { recursive: true, force: true });
   }
