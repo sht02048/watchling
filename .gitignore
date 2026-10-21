@@ -6,3 +6,4 @@ playwright-report/
 build/
 native/hook-emitter/.build/
 native/hook-emitter/.swiftpm/
+.omc/
