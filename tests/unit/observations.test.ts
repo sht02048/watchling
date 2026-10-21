@@ -174,15 +174,6 @@ test("ambiguous fingerprint clear marks the session unknown", () => {
       inputFingerprint: fpA,
     }),
   );
-  assert.equal(stateOf(observations), "asking");
-  feed(
-    observations,
-    event("PostToolUseFailure", {
-      toolName: "Bash",
-      toolUseId: "t2",
-      isInterrupt: true,
-    }),
-  );
   assert.equal(stateOf(observations), "unknown");
   feed(observations, event("Stop"));
   assert.equal(stateOf(observations), "unknown");
@@ -530,4 +521,88 @@ test("captured permission-host-none trace asks at the request and clears on the 
     "Stop:done",
     "SessionEnd:idle",
   ]);
+});
+
+test("a permission matching several pending tools stays fingerprint keyed", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PreToolUse", {
+      toolName: "Bash",
+      toolUseId: "t1",
+      inputFingerprint: fpA,
+    }),
+    event("PreToolUse", {
+      toolName: "Bash",
+      toolUseId: "t2",
+      inputFingerprint: fpA,
+    }),
+    event("PermissionRequest", { toolName: "Bash", inputFingerprint: fpA }),
+  );
+  assert.equal(stateOf(observations), "asking");
+  feed(
+    observations,
+    event("PostToolBatch", {
+      toolCalls: [{ toolName: "Bash", toolUseId: "t1" }],
+    }),
+  );
+  assert.equal(stateOf(observations), "asking");
+  feed(
+    observations,
+    event("PostToolUse", {
+      toolName: "Bash",
+      toolUseId: "t2",
+      inputFingerprint: fpA,
+    }),
+  );
+  assert.equal(stateOf(observations), "working");
+});
+
+test("stop failure ends the turn like stop", () => {
+  const observations = new Observations();
+  feed(observations, event("UserPromptSubmit"), event("StopFailure"));
+  assert.equal(stateOf(observations), "done");
+});
+
+test("non-interactive permission requests still count as activity", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("SessionStart"),
+    event("PermissionRequest", { toolName: "Bash", interactive: false }),
+  );
+  assert.equal(stateOf(observations), "working");
+});
+
+test("events arriving after session end do not revive the session", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("SessionEnd"),
+    event("PostToolUse", { toolName: "Bash", toolUseId: "t1" }),
+    event("SubagentStop", { agentId: "agent-1" }),
+  );
+  assert.equal(observations.snapshot().sessions.length, 0);
+  feed(observations, event("SessionStart"));
+  assert.equal(stateOf(observations), "idle");
+});
+
+test("sessions first seen mid-turn after a loss start unknown", () => {
+  const observations = new Observations();
+  observations.loseIntegrity();
+  feed(
+    observations,
+    event("PreToolUse", {
+      sessionId: "late",
+      toolName: "Bash",
+      toolUseId: "t1",
+    }),
+    event("SessionStart", { sessionId: "fresh" }),
+  );
+  assert.equal(stateOf(observations, "late"), "unknown");
+  assert.equal(stateOf(observations, "fresh"), "idle");
+  feed(observations, event("UserPromptSubmit", { sessionId: "late" }));
+  assert.equal(stateOf(observations, "late"), "working");
 });

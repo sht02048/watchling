@@ -1,16 +1,14 @@
 import type { ClaudeEvent } from "../integration/claude/protocol.ts";
-import type { SemanticState, Snapshot } from "../shared/ui-contract.ts";
+import {
+  semanticStates as priority,
+  type SemanticState,
+  type Snapshot,
+} from "../shared/ui-contract.ts";
 
 const MAX_SESSIONS = 128;
 const MAX_ASKS = 32;
 const MAX_PENDING = 64;
-const priority: readonly SemanticState[] = [
-  "idle",
-  "done",
-  "working",
-  "unknown",
-  "asking",
-];
+const MAX_ENDED = 256;
 const reasons: Record<SemanticState, string> = {
   idle: "세션이 열렸고 아직 요청은 없어요.",
   done: "응답을 마쳤어요.",
@@ -57,6 +55,7 @@ function addAsk(
   if (key && "id" in key && session.idAsks.has(key.id)) return;
   if (!key && session.unkeyedAsk) return;
   if (askCount(session) >= MAX_ASKS) {
+    clearAsks(session);
     session.unknown = true;
     return;
   }
@@ -81,17 +80,29 @@ function display(session: Session): SemanticState {
 
 export class Observations {
   private readonly sessions = new Map<string, Session>();
+  private readonly ended = new Set<string>();
   private lossNotice = false;
+  private lossSeen = false;
   private failed = false;
 
   receive(event: ClaudeEvent): void {
     this.lossNotice = false;
     if (event.eventName === "SessionEnd" && !event.agentId) {
       this.sessions.delete(event.sessionId);
+      this.ended.delete(event.sessionId);
+      if (this.ended.size >= MAX_ENDED)
+        this.ended.delete(this.ended.values().next().value!);
+      this.ended.add(event.sessionId);
       return;
     }
+    const opensTurn =
+      !event.agentId &&
+      (event.eventName === "SessionStart" ||
+        event.eventName === "UserPromptSubmit");
     let session = this.sessions.get(event.sessionId);
     if (!session) {
+      if (this.ended.has(event.sessionId) && !opensTurn) return;
+      this.ended.delete(event.sessionId);
       if (this.sessions.size >= MAX_SESSIONS) {
         this.loseIntegrity();
         return;
@@ -99,7 +110,7 @@ export class Observations {
       session = {
         project: event.project,
         base: "idle",
-        unknown: false,
+        unknown: this.lossSeen && !opensTurn,
         idAsks: new Set(),
         fingerprintAsks: new Map(),
         unkeyedAsk: false,
@@ -130,6 +141,7 @@ export class Observations {
           addAsk(session, { id: event.toolUseId });
         break;
       case "PermissionRequest": {
+        activity();
         if (event.interactive === false) break;
         if (event.toolUseId) {
           addAsk(session, { id: event.toolUseId });
@@ -166,9 +178,9 @@ export class Observations {
           const count = event.inputFingerprint
             ? session.fingerprintAsks.get(event.inputFingerprint)
             : undefined;
-          if (count === 1)
+          if (count !== undefined)
             session.fingerprintAsks.delete(event.inputFingerprint!);
-          else if (count !== undefined) session.unknown = true;
+          if (count !== undefined && count > 1) session.unknown = true;
         }
         session.unkeyedAsk = false;
         activity();
@@ -197,6 +209,7 @@ export class Observations {
 
   loseIntegrity(): void {
     this.lossNotice = true;
+    this.lossSeen = true;
     for (const session of this.sessions.values()) session.unknown = true;
   }
 
