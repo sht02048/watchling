@@ -2364,6 +2364,7 @@ export async function runProfiles(options: {
         "src/integration/claude/protocol.ts",
         "src/domain/observations.ts",
         "native/hook-emitter/Sources/HookProtocol/EventProjection.swift",
+        "native/hook-emitter/Sources/HookProtocol/InputFingerprint.swift",
         "native/hook-emitter/Sources/HookEmitter/main.swift",
         "native/hook-emitter/Sources/HookEmitter/DiagnosticTrace.swift",
         "scripts/build-diagnostic-helper.mjs",

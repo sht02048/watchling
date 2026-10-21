@@ -1,7 +1,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
   chmod,
@@ -69,6 +69,29 @@ interface GuardCase {
 
 const digest = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object")
+    return `{${Object.keys(value)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`,
+      )
+      .join(",")}}`;
+  return JSON.stringify(value);
+}
+
+function fingerprint(token: string, toolName: string, input: unknown): string {
+  const key = createHmac("sha256", Buffer.from(token, "hex"))
+    .update("pagent-fingerprint-v1")
+    .digest();
+  return createHmac("sha256", key)
+    .update(`${toolName}\0${canonical(input)}`)
+    .digest("hex")
+    .slice(0, 32);
+}
 
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), "pagent-emitter-trace-"));
@@ -267,6 +290,12 @@ test("actual 4096-byte delivery emits only the fixed metadata records", async ()
       deliveryStages,
     );
     for (let i = 0; i < 100 && events.length === 0; i++) await delay(5);
+    const endpoint = JSON.parse(
+      await readFile(collector.descriptorPath, "utf8"),
+    ) as {
+      token: string;
+      socketPath: string;
+    };
     assert.deepEqual(events, [
       {
         eventName: "PreToolUse",
@@ -274,14 +303,14 @@ test("actual 4096-byte delivery emits only the fixed metadata records", async ()
         project: "trace-project",
         toolName: "AskUserQuestion",
         toolUseId: "toolu_trace",
+        inputFingerprint: fingerprint(
+          endpoint.token,
+          raw.tool_name,
+          raw.tool_input,
+        ),
       },
     ]);
-    const endpoint = JSON.parse(
-      await readFile(collector.descriptorPath, "utf8"),
-    ) as {
-      token: string;
-      socketPath: string;
-    };
+    assert.equal(JSON.stringify(events).includes(raw.tool_input.source), false);
     for (const forbidden of [
       raw.session_id,
       raw.cwd,
@@ -428,11 +457,13 @@ async function compileFixture(name: string, source: string) {
     [
       "-O",
       "-parse-as-library",
+      "-wmo",
       "-emit-object",
       "-emit-module",
       "-module-name",
       "HookProtocol",
       "native/hook-emitter/Sources/HookProtocol/EventProjection.swift",
+      "native/hook-emitter/Sources/HookProtocol/InputFingerprint.swift",
       "-emit-module-path",
       join(fixtureDirectory, "HookProtocol.swiftmodule"),
       "-o",

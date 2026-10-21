@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import {
   chmod,
   mkdtemp,
@@ -41,10 +41,37 @@ const raw = {
   tool_name: "AskUserQuestion",
   tool_use_id: "toolu_1",
   prompt_id: "prompt-1",
-  tool_input: { questions: ["private question"], code: "private source" },
+  tool_input: {
+    questions: ["private question"],
+    code: "pagent-input-secret-4f9c2a",
+    limit: 3,
+  },
   transcript_path: "/private/transcript",
   prompt: "private prompt",
 };
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object")
+    return `{${Object.keys(value)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`,
+      )
+      .join(",")}}`;
+  return JSON.stringify(value);
+}
+
+function fingerprint(token: string, toolName: string, input: unknown): string {
+  const key = createHmac("sha256", Buffer.from(token, "hex"))
+    .update("pagent-fingerprint-v1")
+    .digest();
+  return createHmac("sha256", key)
+    .update(`${toolName}\0${canonical(input)}`)
+    .digest("hex")
+    .slice(0, 32);
+}
 
 async function run(
   descriptor: string,
@@ -134,11 +161,13 @@ test("independent watchdog exits successfully while the main thread is blocked",
       [
         "-O",
         "-parse-as-library",
+        "-wmo",
         "-emit-object",
         "-emit-module",
         "-module-name",
         "HookProtocol",
         "native/hook-emitter/Sources/HookProtocol/EventProjection.swift",
+        "native/hook-emitter/Sources/HookProtocol/InputFingerprint.swift",
         "-emit-module-path",
         join(directory, "HookProtocol.swiftmodule"),
         "-o",
@@ -185,6 +214,9 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
     safe(result);
     assert.equal(result.inputError, undefined);
     for (let i = 0; i < 100 && events.length === 0; i++) await delay(5);
+    const { token } = JSON.parse(
+      await readFile(collector.descriptorPath, "utf8"),
+    ) as { token: string };
     assert.deepEqual(events, [
       {
         eventName: "PreToolUse",
@@ -193,9 +225,11 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
         toolName: "AskUserQuestion",
         toolUseId: "toolu_1",
         promptId: "prompt-1",
+        inputFingerprint: fingerprint(token, raw.tool_name, raw.tool_input),
       },
     ]);
     assert.equal(JSON.stringify(events).includes("private"), false);
+    assert.equal(JSON.stringify(events).includes(raw.tool_input.code), false);
     safe(await run(collector.descriptorPath, JSON.stringify(raw)));
     for (let i = 0; i < 100 && events.length < 2; i++) await delay(5);
     assert.equal(

@@ -27,15 +27,19 @@ public struct ClaudeEvent: Encodable, Equatable, Sendable {
     public let childStatus: String?
     public let toolCalls: [ToolCall]?
     public let backgroundTasks: [BackgroundTask]?
+    public let inputFingerprint: String?
+    public var interactive: Bool?
 }
 
 public enum EventProjection {
     public static let maximumInputBytes = 1_048_576
 
     // Only this allowlisted value escapes decoding; raw hook payloads are never retained.
-    public static func project(_ data: Data) -> ClaudeEvent? {
+    public static func project(_ data: Data, fingerprintKey: Data? = nil) -> ClaudeEvent? {
         guard data.count <= maximumInputBytes else { return nil }
-        return try? JSONDecoder().decode(DecodedProjection.self, from: data).event
+        let decoder = JSONDecoder()
+        if let fingerprintKey { decoder.userInfo[DecodedProjection.fingerprintKey] = fingerprintKey }
+        return try? decoder.decode(DecodedProjection.self, from: data).event
     }
 }
 
@@ -58,6 +62,7 @@ private enum RawKey: String, CodingKey {
     case toolResponse = "tool_response"
     case toolCalls = "tool_calls"
     case backgroundTasks = "background_tasks"
+    case toolInput = "tool_input"
 }
 
 private extension KeyedDecodingContainer {
@@ -140,6 +145,11 @@ private struct AgentResponse: Decodable {
 private struct DecodedProjection: Decodable {
     let event: ClaudeEvent
 
+    static let fingerprintKey = CodingUserInfoKey(rawValue: "pagent.fingerprintKey")!
+    private static let fingerprintedEvents: Set<String> = [
+        "PreToolUse", "PermissionRequest", "PostToolUse", "PostToolUseFailure",
+    ]
+
     private static let supportedEvents: Set<String> = [
         "SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse",
         "PostToolUse", "PostToolUseFailure", "PermissionRequest", "Notification",
@@ -211,13 +221,22 @@ private struct DecodedProjection: Decodable {
             childStatus = response.status
         }
 
+        var inputFingerprint: String?
+        if Self.fingerprintedEvents.contains(eventName), let toolName,
+            let key = decoder.userInfo[Self.fingerprintKey] as? Data,
+            let input = try? values.decodeIfPresent(CanonicalJSON.self, forKey: .toolInput)
+        {
+            inputFingerprint = InputFingerprint.fingerprint(toolName: toolName, input: input, key: key)
+        }
+
         event = ClaudeEvent(
             eventName: eventName, sessionId: sessionId, project: project,
             promptId: promptId, agentId: agentId, permissionMode: permissionMode,
             toolName: toolName, toolUseId: toolUseId, notificationType: notificationType,
             isInterrupt: isInterrupt, stopHookActive: stopHookActive,
             childAgentId: childAgentId, childStatus: childStatus,
-            toolCalls: toolCalls, backgroundTasks: backgroundTasks
+            toolCalls: toolCalls, backgroundTasks: backgroundTasks,
+            inputFingerprint: inputFingerprint, interactive: nil
         )
     }
 }

@@ -368,7 +368,9 @@ private func run(deadline: Deadline) {
     diagnosticTrace.record(.descriptorEnd)
     diagnosticTrace.record(.projectionBegin)
     #endif
-    guard let event = EventProjection.project(bytes), deadline.isActive else {
+    guard let event = EventProjection.project(
+        bytes, fingerprintKey: InputFingerprint.key(token: descriptor.token)
+    ), deadline.isActive else {
         #if PAGENT_NATIVE_TRACE
         diagnosticTrace.record(.projectionEnd)
         diagnosticTrace.reject(.projectionBegin)
