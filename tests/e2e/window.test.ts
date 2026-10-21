@@ -2,6 +2,8 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { execFile, execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import type { SemanticState } from "../../src/shared/ui-contract.ts";
 
 test("native pet uses isolated UI, continuous animation and a read-only list", async () => {
@@ -132,7 +134,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
       )
       .toBe(true);
     await expect(sessionPage!.locator("#observation")).toContainText(
-      "실제 연동이 포함되지 않았어요",
+      "아직 Claude Code 신호를 수신하지 않았어요",
     );
     await sessionPage!.keyboard.press("Escape");
     await expect
@@ -164,6 +166,71 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
         }
       }),
     ).resolves.toBe(true);
+    const helper = join(
+      execFileSync(
+        "swift",
+        [
+          "build",
+          "--package-path",
+          "native/hook-emitter",
+          "-c",
+          "release",
+          "--show-bin-path",
+        ],
+        { encoding: "utf8" },
+      ).trim(),
+      "pagent-hook-emitter",
+    );
+    await new Promise<void>((done, reject) => {
+      const child = execFile(
+        helper,
+        [
+          "--installation-id",
+          randomUUID(),
+          "--descriptor",
+          join(native.userData, "endpoint.json"),
+        ],
+        { timeout: 1000 },
+        (error, stdout, stderr) => {
+          if (error) return reject(error);
+          try {
+            expect(stdout).toBe("");
+            expect(stderr).toBe("");
+            done();
+          } catch (failure) {
+            reject(failure);
+          }
+        },
+      );
+      child.stdin!.on("error", reject);
+      child.stdin!.end(
+        JSON.stringify({
+          hook_event_name: "SessionStart",
+          session_id: "fixture-session",
+          cwd: "/private/fixture-project",
+          prompt: "must-not-leak",
+        }),
+      );
+    });
+    await expect
+      .poll(() =>
+        sessionPage!.evaluate(
+          async () => (await window.pagent.getSnapshot()).sessions,
+        ),
+      )
+      .toEqual([
+        {
+          id: "fixture-",
+          project: "fixture-project",
+          state: "unknown",
+          reason:
+            "신호는 수신했지만 실제 대기·해제 경로 검증은 아직 완료되지 않았어요.",
+        },
+      ]);
+    await expect(sessionPage!.locator("body")).toContainText("fixture-project");
+    await expect(sessionPage!.locator("body")).not.toContainText(
+      "must-not-leak",
+    );
     expect(errors).toEqual([]);
     await page.screenshot({
       path: "test-results/pet-window.png",

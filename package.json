@@ -7,13 +7,18 @@
   "main": "dist/main/index.js",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:helper": "swift build --package-path native/hook-emitter -c release",
+    "build:local-app": "npm run build && npm run build:helper && node scripts/package.mjs",
     "typecheck": "tsc --noEmit",
     "start": "npm run build && electron .",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
-    "test:e2e": "npm run build && playwright test",
+    "test:integration": "npm run build:helper && node --experimental-strip-types --test tests/integration/*.test.ts",
+    "test:packaged": "npm run build:local-app && node --experimental-strip-types --test tests/packaged/*.test.ts",
+    "test:e2e": "npm run build && npm run build:helper && playwright test",
     "format": "prettier --write src scripts tests package.json tsconfig.json playwright.config.ts"
   },
   "devDependencies": {
+    "@electron/packager": "20.3.0",
     "@playwright/test": "1.64.1",
     "@types/node": "^24.0.0",
     "electron": "44.9.2",
