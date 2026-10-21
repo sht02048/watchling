@@ -4,6 +4,8 @@ import CoreGraphics
 import Darwin
 import Foundation
 
+private let fixtureEventTag: Int64 = 0x50414745
+
 @MainActor
 final class DeliveryCountingView: NSView {
   private(set) var mouseDowns = 0
@@ -14,11 +16,17 @@ final class DeliveryCountingView: NSView {
 
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-  override func mouseDown(with event: NSEvent) { mouseDowns += 1 }
+  override func mouseDown(with event: NSEvent) {
+    if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == fixtureEventTag { mouseDowns += 1 }
+  }
 
-  override func scrollWheel(with event: NSEvent) { scrolls += 1 }
+  override func scrollWheel(with event: NSEvent) {
+    if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == fixtureEventTag { scrolls += 1 }
+  }
 
-  override func keyDown(with event: NSEvent) { keyDowns += 1 }
+  override func keyDown(with event: NSEvent) {
+    if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == fixtureEventTag { keyDowns += 1 }
+  }
 }
 
 @MainActor
@@ -212,6 +220,7 @@ final class DesktopHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
       if command == "down" || command == "up" {
         event.setIntegerValueField(.mouseEventClickState, value: 1)
       }
+      event.setIntegerValueField(.eventSourceUserData, value: fixtureEventTag)
       event.post(tap: .cghidEventTap)
       respond(id, ["ok": true])
     case "scroll":
@@ -234,6 +243,7 @@ final class DesktopHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return
       }
       event.flags = []
+      event.setIntegerValueField(.eventSourceUserData, value: fixtureEventTag)
       event.post(tap: .cghidEventTap)
       respond(id, ["ok": true])
     case "key":
@@ -250,6 +260,8 @@ final class DesktopHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
       }
       down.flags = []
       up.flags = []
+      down.setIntegerValueField(.eventSourceUserData, value: fixtureEventTag)
+      up.setIntegerValueField(.eventSourceUserData, value: fixtureEventTag)
       down.post(tap: .cghidEventTap)
       up.post(tap: .cghidEventTap)
       respond(id, ["ok": true])
