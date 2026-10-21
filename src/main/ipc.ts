@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import type { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent } from "electron";
-import type { Snapshot } from "../shared/ui-contract.ts";
+import { isPoint, type Point, type Snapshot } from "../shared/ui-contract.ts";
 
 type Request = IpcMainEvent | IpcMainInvokeEvent;
 export function ownsFrame(
@@ -21,7 +21,7 @@ export function attachIpc(options: {
   list: BrowserWindow;
   snapshot: () => Snapshot;
   hit: (value: boolean) => void;
-  beginDrag: () => void;
+  beginDrag: (cursor: Point) => void;
   endDrag: () => void;
   openList: () => void;
   closeList: () => void;
@@ -72,8 +72,10 @@ export function attachIpc(options: {
   listen("pagent:pet-hit", "pet", (...args) => {
     if (args.length === 1 && typeof args[0] === "boolean") options.hit(args[0]);
   });
+  listen("pagent:drag-start", "pet", (...args) => {
+    if (args.length === 1 && isPoint(args[0])) options.beginDrag(args[0]);
+  });
   for (const [channel, handler] of [
-    ["pagent:drag-start", options.beginDrag],
     ["pagent:drag-end", options.endDrag],
     ["pagent:list-open", options.openList],
   ] as const) {

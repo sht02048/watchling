@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clampWindow, isPoint, listPosition } from "../../src/main/geometry.ts";
+import { clampWindow, listPosition } from "../../src/main/geometry.ts";
+import { isPoint } from "../../src/shared/ui-contract.ts";
 
 test("rejects malformed coordinates without coercion", () => {
   for (const input of [
@@ -9,6 +10,8 @@ test("rejects malformed coordinates without coercion", () => {
     { x: "1", y: 2 },
     { x: NaN, y: 0 },
     { x: 0, y: Infinity },
+    { x: 1e308, y: 0 },
+    { x: 0, y: -1_000_001 },
     { x: 0, y: 0, extra: 1 },
   ])
     assert.equal(isPoint(input), false);

@@ -40,7 +40,7 @@ let detachIpc: (() => void) | undefined;
 let store: PositionStore | undefined;
 let quitting = false;
 let quitFlushed = false;
-let dragging: { cursor: Point; origin: Point } | undefined;
+let dragging: { cursor: Point; origin: Point; moved: boolean } | undefined;
 let hit = false;
 let ignoring = true;
 const snapshot: Snapshot = {
@@ -71,8 +71,24 @@ function updateInput(): void {
   pet.setIgnoreMouseEvents(next, { forward: true });
 }
 
+function updateDrag(cursor: Point): void {
+  if (!dragging || !pet || pet.isDestroyed()) return;
+  const dx = cursor.x - dragging.cursor.x;
+  const dy = cursor.y - dragging.cursor.y;
+  if (!dragging.moved && Math.hypot(dx, dy) < 5) return;
+  dragging.moved = true;
+  const area = screen.getDisplayNearestPoint(cursor).workArea;
+  const position = clampWindow(
+    { x: dragging.origin.x + dx, y: dragging.origin.y + dy },
+    area,
+    size,
+  );
+  pet.setPosition(position.x, position.y);
+}
+
 function endDrag(): void {
-  if (dragging && pet && !pet.isDestroyed()) {
+  if (dragging) updateDrag(screen.getCursorScreenPoint());
+  if (dragging?.moved && pet && !pet.isDestroyed()) {
     const { x, y } = pet.getBounds();
     void store?.save({ x, y });
   }
@@ -212,9 +228,8 @@ async function start(): Promise<void> {
       hit = value;
       updateInput();
     },
-    beginDrag: () => {
+    beginDrag: (cursor) => {
       if (!pet?.isVisible() || !hit || dragging) return;
-      const cursor = screen.getCursorScreenPoint();
       const bounds = pet.getBounds();
       if (
         cursor.x < bounds.x ||
@@ -223,7 +238,7 @@ async function start(): Promise<void> {
         cursor.y > bounds.y + bounds.height
       )
         return;
-      dragging = { cursor, origin: { x: bounds.x, y: bounds.y } };
+      dragging = { cursor, origin: { x: bounds.x, y: bounds.y }, moved: false };
       list?.hide();
       updateInput();
     },
@@ -269,18 +284,7 @@ async function start(): Promise<void> {
   timer = setInterval(() => {
     if (!pet?.isVisible() || pet.webContents.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
-    if (dragging) {
-      const area = screen.getDisplayNearestPoint(cursor).workArea;
-      const position = clampWindow(
-        {
-          x: dragging.origin.x + cursor.x - dragging.cursor.x,
-          y: dragging.origin.y + cursor.y - dragging.cursor.y,
-        },
-        area,
-        size,
-      );
-      pet.setPosition(position.x, position.y);
-    }
+    updateDrag(cursor);
     const bounds = pet.getBounds();
     pet.webContents.send("pagent:cursor", {
       x: cursor.x - bounds.x,

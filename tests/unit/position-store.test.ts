@@ -36,11 +36,14 @@ test("invalid persistence never becomes a window coordinate", async () => {
       "broken",
       '{"x":"100","y":5}',
       '{"x":null,"y":null}',
+      '{"x":1e308,"y":0}',
       " ".repeat(257) + '{"x":1,"y":2}',
     ]) {
       await writeFile(join(directory, "position.json"), data);
       assert.equal(await store.load(), null);
     }
+    await writeFile(join(directory, "position.json"), '{"x":42.2,"y":24.7}');
+    assert.deepEqual(await store.load(), { x: 42, y: 25 });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

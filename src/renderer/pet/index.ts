@@ -33,6 +33,7 @@ canvas.addEventListener("pointerdown", (event) => {
     moved: false,
   };
   canvas.setPointerCapture(event.pointerId);
+  window.pagent.beginDrag({ x: event.screenX, y: event.screenY });
 });
 canvas.addEventListener("pointermove", (event) => {
   if (!pointer || pointer.id !== event.pointerId) return;
@@ -41,12 +42,14 @@ canvas.addEventListener("pointermove", (event) => {
     Math.hypot(event.screenX - pointer.x, event.screenY - pointer.y) >= 5
   ) {
     pointer.moved = true;
-    window.pagent.beginDrag();
   }
 });
 function finish(event: PointerEvent, cancelled: boolean): void {
   if (!pointer || pointer.id !== event.pointerId) return;
-  const click = !pointer.moved && !cancelled;
+  const click =
+    !pointer.moved &&
+    !cancelled &&
+    Math.hypot(event.screenX - pointer.x, event.screenY - pointer.y) < 5;
   pointer = undefined;
   window.pagent.endDrag();
   if (canvas!.hasPointerCapture(event.pointerId))

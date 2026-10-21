@@ -5,18 +5,6 @@ export interface Bounds extends Point {
   height: number;
 }
 
-export function isPoint(value: unknown): value is Point {
-  if (value === null || typeof value !== "object") return false;
-  const point = value as Record<string, unknown>;
-  return (
-    Object.keys(point).length === 2 &&
-    typeof point.x === "number" &&
-    typeof point.y === "number" &&
-    Number.isFinite(point.x) &&
-    Number.isFinite(point.y)
-  );
-}
-
 export function clampWindow(
   position: Point,
   area: Bounds,

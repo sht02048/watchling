@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { PetBridge, Point, Snapshot } from "../shared/ui-contract.ts";
+import {
+  isPoint,
+  type PetBridge,
+  type Point,
+  type Snapshot,
+} from "../shared/ui-contract.ts";
 
 function subscribe<T>(
   channel: string,
@@ -17,8 +22,13 @@ const bridge: PetBridge = Object.freeze({
     subscribe("pagent:snapshot-changed", listener),
   onCursor: (listener: (point: Point) => void) =>
     subscribe("pagent:cursor", listener),
-  setPetHit: (hit: boolean) => ipcRenderer.send("pagent:pet-hit", hit),
-  beginDrag: () => ipcRenderer.send("pagent:drag-start"),
+  setPetHit: (hit: boolean) => {
+    if (typeof hit === "boolean") ipcRenderer.send("pagent:pet-hit", hit);
+  },
+  beginDrag: (cursor: Point) => {
+    if (isPoint(cursor))
+      ipcRenderer.send("pagent:drag-start", { x: cursor.x, y: cursor.y });
+  },
   endDrag: () => ipcRenderer.send("pagent:drag-end"),
   openSessionList: () => ipcRenderer.send("pagent:list-open"),
   closeSessionList: () => ipcRenderer.send("pagent:list-close"),

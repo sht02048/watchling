@@ -24,12 +24,26 @@ export interface Point {
   y: number;
 }
 
+export function isPoint(value: unknown): value is Point {
+  if (value === null || typeof value !== "object") return false;
+  const point = value as Record<string, unknown>;
+  return (
+    Object.keys(point).length === 2 &&
+    typeof point.x === "number" &&
+    typeof point.y === "number" &&
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    Math.abs(point.x) <= 1_000_000 &&
+    Math.abs(point.y) <= 1_000_000
+  );
+}
+
 export interface PetBridge {
   getSnapshot(): Promise<Snapshot>;
   onSnapshot(listener: (snapshot: Snapshot) => void): () => void;
   onCursor(listener: (point: Point) => void): () => void;
   setPetHit(hit: boolean): void;
-  beginDrag(): void;
+  beginDrag(cursor: Point): void;
   endDrag(): void;
   openSessionList(): void;
   closeSessionList(): void;

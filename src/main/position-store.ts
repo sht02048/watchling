@@ -1,7 +1,6 @@
 import { mkdir, open, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Point } from "../shared/ui-contract.ts";
-import { isPoint } from "./geometry.ts";
+import { isPoint, type Point } from "../shared/ui-contract.ts";
 
 export class PositionStore {
   private writes: Promise<void> = Promise.resolve();
@@ -24,7 +23,8 @@ export class PositionStore {
         await file.close();
       }
       const value: unknown = JSON.parse(text);
-      if (isPoint(value)) return value;
+      if (isPoint(value))
+        return { x: Math.round(value.x), y: Math.round(value.y) };
       console.warn("Position restore skipped: invalid coordinates");
     } catch (error) {
       if (!(

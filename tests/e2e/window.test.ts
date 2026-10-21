@@ -7,7 +7,7 @@ import type { SemanticState } from "../../src/shared/ui-contract.ts";
 test("native pet uses isolated UI, continuous animation and a read-only list", async () => {
   const home = await mkdtemp(join(tmpdir(), "pagent-electron-"));
   const application = await electron.launch({
-    args: [resolve("dist/main/index.js")],
+    args: [resolve(".")],
     env: { ...process.env, HOME: home },
   });
   const errors: string[] = [];
