@@ -5,6 +5,7 @@ import { runDesktop, type DesktopControls } from "../../src/main/desktop.ts";
 import type { SnapshotAccounting } from "../../src/main/snapshot-publisher.ts";
 import type { TransportReceipt } from "../../src/integration/claude/protocol.ts";
 import type { Snapshot } from "../../src/shared/ui-contract.ts";
+import { createProfileTrace } from "./trace.ts";
 
 type Profile = "N" | "O";
 type Stats = Record<string, number | null>;
@@ -33,6 +34,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 // This entrypoint is bundled separately. No fixture API is registered with IPC.
+const trace = createProfileTrace();
 const timers = new Set<Timer>();
 const drains = new Set<() => void>();
 const violations = new Set<string>();
@@ -94,6 +96,14 @@ for (const [stream, record] of [
 
 function at(now = process.hrtime.bigint()): number {
   return Number(now - origin) / 1e6;
+}
+function traced<Value>(operation: string, callback: () => Value): Value {
+  const end = trace.begin(operation);
+  try {
+    return callback();
+  } finally {
+    end();
+  }
 }
 function later(callback: () => void, milliseconds: number): Timer {
   if (timers.size >= 128) throw new Error("Fixture timer bound exceeded");
@@ -176,7 +186,9 @@ function checkStats(): void {
     violations.add("Production collector did not start");
     return;
   }
-  const stats = { ...current.collector.stats() } as unknown as Stats;
+  const stats = traced("fixture.resource.stats", () => ({
+    ...current.collector!.stats(),
+  })) as unknown as Stats;
   const bounds: Record<string, number> = {
     activeConnections: 16,
     queued: 128,
@@ -205,8 +217,10 @@ function checkStats(): void {
     else if (key in bounds && value > bounds[key]!)
       violations.add(`Collector ${key} exceeded ${bounds[key]}`);
   }
-  const snapshot = current.getSnapshot();
-  const encoded = JSON.stringify(snapshot);
+  const snapshot = traced("fixture.snapshot.get", () => current.getSnapshot());
+  const encoded = traced("fixture.snapshot.encode", () =>
+    JSON.stringify(snapshot),
+  );
   const snapshotBytes = Buffer.byteLength(encoded);
   const pending = current.isSnapshotPending();
   if (snapshotBytes > 128 * 1024) violations.add("Snapshot exceeded 128 KiB");
@@ -238,7 +252,9 @@ function checkStats(): void {
     firstUnknownAfterDropDelayMs =
       performance.now() - firstAuthenticatedDropPerformanceMs!;
   }
-  const fingerprint = JSON.stringify([stats, snapshotBytes, pending]);
+  const fingerprint = traced("fixture.resource.encode", () =>
+    JSON.stringify([stats, snapshotBytes, pending]),
+  );
   if (fingerprint !== lastResources) {
     append(
       resources,
@@ -260,13 +276,17 @@ function checkStats(): void {
   }
 }
 function safeCheck(): void {
+  const end = trace.begin("fixture.resource.sample");
   try {
     checkStats();
   } catch (error) {
     violations.add(`Resource sampling failed: ${String(error)}`);
+  } finally {
+    end();
   }
 }
 function sampleDisplay(reason: string): void {
+  const end = trace.begin("fixture.display.sample");
   try {
     append(
       displaySamples,
@@ -284,6 +304,8 @@ function sampleDisplay(reason: string): void {
     violations.add(
       `Display availability could not be measured: ${String(error)}`,
     );
+  } finally {
+    end();
   }
 }
 const locked = (): void => sampleDisplay("lock-screen");
@@ -294,48 +316,50 @@ function beginSampling(): void {
   origin = process.hrtime.bigint();
   originPerformanceMs = performance.now();
   let tick = 1;
-  const probe = (): void => {
-    if (stopped) return;
-    const now = at();
-    // Account for EVERY scheduled 20 ms tick, including ticks lost to a stall.
-    while (tick * 20 <= now) {
-      append(
-        loop,
-        { atMs: tick * 20, delayMs: now - tick * 20 },
-        12_000,
-        "Main loop",
-      );
-      tick++;
-    }
-    safeCheck();
-    later(probe, tick * 20 - at());
-  };
+  const probe = (): void =>
+    traced("fixture.loop.probe", () => {
+      if (stopped) return;
+      const now = at();
+      // Account for EVERY scheduled 20 ms tick, including ticks lost to a stall.
+      while (tick * 20 <= now) {
+        append(
+          loop,
+          { atMs: tick * 20, delayMs: now - tick * 20 },
+          12_000,
+          "Main loop",
+        );
+        tick++;
+      }
+      safeCheck();
+      later(probe, tick * 20 - at());
+    });
   let memoryTick = 0;
-  const memory = (): void => {
-    if (stopped) return;
-    if (at() < memoryTick * 100) {
+  const memory = (): void =>
+    traced("fixture.memory.sample", () => {
+      if (stopped) return;
+      if (at() < memoryTick * 100) {
+        later(memory, memoryTick * 100 - at());
+        return;
+      }
+      append(
+        rss,
+        {
+          atMs: at(),
+          scheduledMs: memoryTick * 100,
+          bytes: traced("fixture.rss.read", () => process.memoryUsage().rss),
+        },
+        2500,
+        "RSS",
+      );
+      if (memoryTick % 10 === 0) sampleDisplay("1s probe");
+      memoryTick++;
+      const now = at();
+      if (now >= memoryTick * 100) {
+        violations.add("Main RSS sampling missed a scheduled 100 ms sample");
+        memoryTick = Math.floor(now / 100) + 1;
+      }
       later(memory, memoryTick * 100 - at());
-      return;
-    }
-    append(
-      rss,
-      {
-        atMs: at(),
-        scheduledMs: memoryTick * 100,
-        bytes: process.memoryUsage().rss,
-      },
-      2500,
-      "RSS",
-    );
-    if (memoryTick % 10 === 0) sampleDisplay("1s probe");
-    memoryTick++;
-    const now = at();
-    if (now >= memoryTick * 100) {
-      violations.add("Main RSS sampling missed a scheduled 100 ms sample");
-      memoryTick = Math.floor(now / 100) + 1;
-    }
-    later(memory, memoryTick * 100 - at());
-  };
+    });
   probe();
   memory();
 }
@@ -377,7 +401,7 @@ async function changed(
   deadline: bigint,
 ): Promise<boolean> {
   while (!stopped) {
-    if (condition()) return true;
+    if (traced("fixture.native.poll", condition)) return true;
     if (process.hrtime.bigint() >= deadline) return false;
     await new Promise<void>((resolve) => later(resolve, 5));
   }
@@ -393,32 +417,38 @@ async function drag(index: number, scheduledMs: number): Promise<void> {
     passed: false,
   };
   try {
-    const pet = petWindow();
-    if (!pet.isVisible()) throw new Error("Pet was hidden at drag dispatch");
-    // Setup only: put the window away from a clamped edge. The MEASURED move
-    // below is exclusively PetBridge -> production drag handler -> native bounds.
-    const bounds = pet.getBounds();
-    const area = screen.getDisplayMatching(bounds).workArea;
-    pet.setPosition(
-      Math.round(area.x + (area.width - bounds.width) / 2),
-      Math.round(area.y + (area.height - bounds.height) / 2),
-    );
-    result.before = pet.getBounds();
-    const cursor = screen.getCursorScreenPoint();
-    const start = {
-      x: result.before.x + result.before.width / 2,
-      y: result.before.y + result.before.height / 2,
-    };
-    if (Math.hypot(cursor.x - start.x, cursor.y - start.y) < 10) start.x += 20;
+    const { pet, start } = traced("fixture.drag.setup", () => {
+      const pet = petWindow();
+      if (!pet.isVisible()) throw new Error("Pet was hidden at drag dispatch");
+      // Setup only: put the window away from a clamped edge. The MEASURED move
+      // below is exclusively PetBridge -> production drag handler -> native bounds.
+      const bounds = pet.getBounds();
+      const area = screen.getDisplayMatching(bounds).workArea;
+      pet.setPosition(
+        Math.round(area.x + (area.width - bounds.width) / 2),
+        Math.round(area.y + (area.height - bounds.height) / 2),
+      );
+      result.before = pet.getBounds();
+      const cursor = screen.getCursorScreenPoint();
+      const start = {
+        x: result.before.x + result.before.width / 2,
+        y: result.before.y + result.before.height / 2,
+      };
+      if (Math.hypot(cursor.x - start.x, cursor.y - start.y) < 10)
+        start.x += 20;
+      return { pet, start };
+    });
     result.dispatchedMs = at();
     const dispatched = process.hrtime.bigint();
     const budget = selected === "N" ? 250 : 500;
     // No mouse/keyboard injection and no new IPC. The renderer's real bridge
     // delivers these calls through the existing authenticated pet frame.
-    const delivered = pet.webContents.executeJavaScript(`
+    const delivered = traced("fixture.drag.bridge", () =>
+      pet.webContents.executeJavaScript(`
       window.pagent.setPetHit(true);
       window.pagent.beginDrag(${JSON.stringify(start)});
-    `);
+    `),
+    );
     delivered.catch((error: unknown) => {
       violations.add(`Drag bridge delivery failed: ${String(error)}`);
     });
@@ -449,6 +479,7 @@ function visibility(
   scheduledMs: number,
 ): void {
   const dispatched = process.hrtime.bigint();
+  const end = trace.begin("fixture.visibility.action");
   const result: Action = {
     kind,
     index,
@@ -477,6 +508,8 @@ function visibility(
     }
   } catch (error) {
     result.error = String(error);
+  } finally {
+    end();
   }
   append(actions, result, 30, "Action");
 }
@@ -488,6 +521,7 @@ function cleanup(): void {
   drains.clear();
   powerMonitor.removeListener("lock-screen", locked);
   powerMonitor.removeListener("unlock-screen", unlocked);
+  trace.close();
 }
 app.once("before-quit", cleanup);
 
@@ -551,7 +585,11 @@ const api = {
     sampleDisplay("finish");
     append(
       rss,
-      { atMs: at(), scheduledMs: null, bytes: process.memoryUsage().rss },
+      {
+        atMs: at(),
+        scheduledMs: null,
+        bytes: traced("fixture.rss.read", () => process.memoryUsage().rss),
+      },
       2500,
       "RSS",
     );
@@ -574,6 +612,7 @@ const api = {
       actions,
       hidden,
       displaySamples,
+      trace: trace.report(),
       finalStats,
       finalSnapshot,
       confidence: {
@@ -608,6 +647,7 @@ const api = {
 Object.defineProperty(globalThis, "__pagentTransportProfile", { value: api });
 
 await runDesktop(resolveAppPaths(home).userData, {
+  trace: trace.begin,
   scheduleDrain,
   onTransportReceipt: recordReceipt,
   onSnapshotAccounting: recordSnapshot,

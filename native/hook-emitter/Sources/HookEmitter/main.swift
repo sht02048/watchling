@@ -257,6 +257,16 @@ private func sendAll(_ bytes: Data, fd: Int32, deadline: Deadline) -> Bool {
 }
 
 private func emit(_ event: ClaudeEvent, descriptor: Descriptor, uid: uid_t, deadline: Deadline) {
+    #if PAGENT_NATIVE_TRACE
+    diagnosticTrace.record(.connectBegin)
+    var connected = false
+    defer {
+        if !connected {
+            diagnosticTrace.record(.connectEnd)
+            diagnosticTrace.reject(.connectBegin)
+        }
+    }
+    #endif
     guard deadline.isActive,
         let path = AbsolutePath(descriptor.socketPath),
         var frame = try? JSONEncoder().encode(
@@ -300,7 +310,16 @@ private func emit(_ event: ClaudeEvent, descriptor: Descriptor, uid: uid_t, dead
     var peerUid: uid_t = 0
     var peerGid: gid_t = 0
     guard Darwin.getpeereid(fd, &peerUid, &peerGid) == 0, peerUid == uid, deadline.isActive else { return }
+    #if PAGENT_NATIVE_TRACE
+    connected = true
+    diagnosticTrace.record(.connectEnd)
+    diagnosticTrace.record(.sendBegin)
+    let sent = sendAll(frame, fd: fd, deadline: deadline)
+    diagnosticTrace.record(.sendEnd)
+    if !sent { diagnosticTrace.reject(.sendBegin) }
+    #else
     _ = sendAll(frame, fd: fd, deadline: deadline)
+    #endif
 }
 
 private func run(deadline: Deadline) {
@@ -308,24 +327,80 @@ private func run(deadline: Deadline) {
     guard arguments.count == 5, arguments[1] == "--installation-id",
         isUUID(arguments[2], lowercaseOnly: false), arguments[3] == "--descriptor",
         let descriptorPath = AbsolutePath(arguments[4]), deadline.isActive
-    else { return }
+    else {
+        #if PAGENT_NATIVE_TRACE
+        diagnosticTrace.reject(.mainEntry)
+        #endif
+        return
+    }
 
     // The installation ID is only a validated ownership marker, never authorization.
     let uid = Darwin.getuid()
-    guard uid == Darwin.geteuid(),
-        let bytes = readStandardInput(deadline: deadline), deadline.isActive,
-        let descriptor = readDescriptor(descriptorPath, uid: uid, deadline: deadline),
-        let event = EventProjection.project(bytes), deadline.isActive
-    else { return }
+    guard uid == Darwin.geteuid() else {
+        #if PAGENT_NATIVE_TRACE
+        diagnosticTrace.reject(.mainEntry)
+        #endif
+        return
+    }
+
+    #if PAGENT_NATIVE_TRACE
+    diagnosticTrace.record(.stdinBegin)
+    #endif
+    guard let bytes = readStandardInput(deadline: deadline), deadline.isActive else {
+        #if PAGENT_NATIVE_TRACE
+        diagnosticTrace.record(.stdinEnd)
+        diagnosticTrace.reject(.stdinBegin)
+        #endif
+        return
+    }
+    #if PAGENT_NATIVE_TRACE
+    diagnosticTrace.record(.stdinEnd)
+    diagnosticTrace.record(.descriptorBegin)
+    #endif
+    guard let descriptor = readDescriptor(descriptorPath, uid: uid, deadline: deadline) else {
+        #if PAGENT_NATIVE_TRACE
+        diagnosticTrace.record(.descriptorEnd)
+        diagnosticTrace.reject(.descriptorBegin)
+        #endif
+        return
+    }
+    #if PAGENT_NATIVE_TRACE
+    diagnosticTrace.record(.descriptorEnd)
+    diagnosticTrace.record(.projectionBegin)
+    #endif
+    guard let event = EventProjection.project(bytes), deadline.isActive else {
+        #if PAGENT_NATIVE_TRACE
+        diagnosticTrace.record(.projectionEnd)
+        diagnosticTrace.reject(.projectionBegin)
+        #endif
+        return
+    }
+    #if PAGENT_NATIVE_TRACE
+    diagnosticTrace.record(.projectionEnd)
+    #endif
     emit(event, descriptor: descriptor, uid: uid, deadline: deadline)
 }
 
 let watchdogDeadline = DispatchTime.now() + .milliseconds(150)
+#if PAGENT_NATIVE_TRACE
+private let diagnosticTrace = DiagnosticTrace()
+diagnosticTrace.record(.mainEntry)
+#endif
 if let deadline = Deadline() {
     // A separate queue can terminate even while the main thread is blocked in filesystem I/O.
     DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: watchdogDeadline) {
+        #if PAGENT_NATIVE_TRACE
+        diagnosticTrace.record(.watchdogExit)
+        #endif
         Darwin._exit(0)
     }
     run(deadline: deadline)
+} else {
+    #if PAGENT_NATIVE_TRACE
+    diagnosticTrace.reject(.mainEntry)
+    #endif
 }
+#if PAGENT_NATIVE_TRACE
+diagnosticTrace.record(.normalReturn)
+#endif
 Darwin._exit(0)

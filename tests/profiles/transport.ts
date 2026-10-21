@@ -17,7 +17,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { createConnection, createServer, type Socket } from "node:net";
+import { createServer, type Socket } from "node:net";
 import { createRequire } from "node:module";
 import {
   arch,
@@ -42,11 +42,21 @@ import {
 import { quoteHookArgument } from "../../src/integration/claude/hook-install.ts";
 import type { Snapshot } from "../../src/shared/ui-contract.ts";
 import type { ArmReport, MainReport, ProfileFixture } from "./main.ts";
+import { diagnoseOrder, normalCorpusPredecessors } from "./order.ts";
+import { createProfileTrace } from "./trace.ts";
 import {
-  diagnoseOrder,
-  diagnoseProducer,
-  type ProducerTiming,
-} from "./order.ts";
+  distribution,
+  fixedLane,
+  padded,
+  prepareUdsProducer,
+  sendWire,
+  until as waitUntil,
+  wire,
+  type LaneReport,
+  type UdsProducer,
+  type UdsReport,
+  type WireResult,
+} from "./uds-producer.ts";
 
 type Profile = "N" | "O";
 type Slot = {
@@ -57,7 +67,7 @@ type Slot = {
   input: Buffer;
   sha256: string;
   replayOf: string | null;
-  predecessor: string | null;
+  predecessors: string[];
 };
 type HelperResult = {
   spawned: boolean;
@@ -69,24 +79,29 @@ type HelperResult = {
   timedOut: boolean;
   inputError: string | null;
   error: string | null;
+  lifecycle?: {
+    spawnPid: number | null;
+    requestedNs: string;
+    spawnReturnedNs: string;
+    spawnEventObservedNs: string | null;
+    stdinFinishedObservedNs: string | null;
+    exitObservedNs: string | null;
+    closeObservedNs: string | null;
+  };
+  diagnostic?: {
+    invalidRecords: number;
+    overflow: boolean;
+    trailingBytes: number;
+    records: {
+      stage: number;
+      pid: number;
+      detail: number;
+      uptimeNs: string;
+      threadCpuNs: string;
+    }[];
+  };
 };
-type WireResult = {
-  connected: boolean;
-  written: boolean;
-  elapsedMs: number;
-  error: string | null;
-};
-type Attempt = ProducerTiming & {
-  role: string;
-  preparedNs: string;
-  startedNs: string | null;
-  finishedNs: string | null;
-  finishedMs: number | null;
-  eventId: string | null;
-  sha256: string | null;
-  bytes: number;
-  result: HelperResult | WireResult | null;
-};
+type NativeLane = LaneReport<HelperResult | WireResult>;
 type Capture = {
   key: string;
   bytes: number;
@@ -101,6 +116,9 @@ type RendererSample = {
   scheduledMs: number;
   startedMs: number | null;
   latencyMs: number | null;
+  snapshotResolvedMs?: number;
+  renderFinishedMs?: number;
+  rafObservedMs?: number;
   outcome:
     "ok" | "hidden" | "missed" | "busy" | "error" | "timeout" | "stopped";
   error?: string;
@@ -121,6 +139,8 @@ const children = new Set<ChildProcess>();
 const sockets = new Set<Socket>();
 const abort = new AbortController();
 let activeApplication: ElectronApplication | undefined;
+let diagnosticNative = false;
+let driverTrace: ReturnType<typeof createProfileTrace> | undefined;
 const unmetEvidence = [
   "Current upstream/reducer capabilities do not represent confirmed approval/question waits with causal clears; candidate corpus roles are not verified provider semantics.",
   "Confirmed attention in another session, affected-scope confidence transitions, and non-restoration of confirmed waits are unsupported by unknown-only Observations.",
@@ -247,28 +267,8 @@ function environment(home: string): Record<string, string> {
   env.XDG_CONFIG_HOME = join(home, ".config");
   return env;
 }
-async function until(deadline: bigint): Promise<void> {
-  while (now() < deadline) {
-    abort.signal.throwIfAborted();
-    await delay(
-      Math.min(1000, Math.max(1, Number(deadline - now()) / 1e6)),
-      undefined,
-      { signal: abort.signal },
-    );
-  }
-}
-function distribution(values: readonly number[]) {
-  const ordered = [...values].sort((a, b) => a - b);
-  const percentile = (p: number): number | null =>
-    ordered.length ? ordered[Math.ceil(ordered.length * p) - 1]! : null;
-  return {
-    count: values.length,
-    firstMs: values[0] ?? null,
-    p50Ms: percentile(0.5),
-    p95Ms: percentile(0.95),
-    maximumMs: ordered.at(-1) ?? null,
-    cumulativeMs: values.reduce((total, value) => total + value, 0),
-  };
+function until(deadline: bigint): Promise<void> {
+  return waitUntil(deadline, abort.signal);
 }
 function median(values: readonly number[]): number | null {
   const sorted = [...values].sort((a, b) => a - b);
@@ -308,20 +308,6 @@ function canonical(event: ClaudeEvent): string {
     Object.fromEntries(
       Object.entries(event).sort(([a], [b]) => a.localeCompare(b)),
     ),
-  );
-}
-function padded(value: unknown, bytes: number, newline: boolean): Buffer {
-  const json = Buffer.from(JSON.stringify(value));
-  const length = bytes - json.length - (newline ? 1 : 0);
-  if (length < 0)
-    throw new Error(`Fixture exceeds its fixed ${bytes} byte size`);
-  return Buffer.concat(
-    [
-      json,
-      Buffer.alloc(length, 32),
-      newline ? Buffer.from("\n") : Buffer.alloc(0),
-    ],
-    bytes,
   );
 }
 function corpus(profile: Profile): Slot[] {
@@ -425,49 +411,16 @@ function corpus(profile: Profile): Slot[] {
         sha256: sha256(input),
         replayOf:
           step >= 18 ? `${prefix}${String(original).padStart(2, "0")}` : null,
-        predecessor: step
-          ? `${prefix}${String(step - 1).padStart(2, "0")}`
-          : null,
+        predecessors:
+          profile === "N"
+            ? normalCorpusPredecessors(slots.length).map(
+                (index) => slots[index]!.key,
+              )
+            : [],
       });
     }
   }
   return slots;
-}
-function wire(
-  index: number,
-  endpoint: Endpoint,
-): { bytes: Buffer; role: string; eventId: string } {
-  const kind = index % 10;
-  const root = Math.floor(index / 10) % 8;
-  const event: ClaudeEvent = {
-    eventName: "SessionStart",
-    sessionId: kind >= 8 ? `rejected-${kind}-${index}` : `profile-root-${root}`,
-    project: kind >= 8 ? `rejected-project-${kind}` : `profile-project-${root}`,
-    promptId: `uds-${String(index).padStart(4, "0")}`,
-  };
-  const wrongToken =
-    (endpoint.token[0] === "0" ? "1" : "0") + endpoint.token.slice(1);
-  const eventId = `50414745-0000-4000-8000-${index.toString(16).padStart(12, "0")}`;
-  return {
-    eventId,
-    bytes: padded(
-      {
-        version: 1,
-        epoch: endpoint.epoch,
-        token: kind === 9 ? wrongToken : endpoint.token,
-        eventId,
-        event,
-      },
-      kind === 8 ? 8193 : 8192,
-      true,
-    ),
-    role:
-      kind === 8
-        ? "oversized"
-        : kind === 9
-          ? "wrong-token"
-          : "authenticated-valid",
-  };
 }
 async function fixtureFiles(normal: Slot[], overload: Slot[]) {
   const manifest: {
@@ -522,11 +475,14 @@ async function helper(
 ): Promise<HelperResult> {
   const start = now(); // Startup-inclusive: before the configured shell command spawn.
   let child: ChildProcess;
+  const finishSpawn = driverTrace?.begin("driver.helper.dispatch");
   try {
     child = spawn("/bin/sh", ["-c", command], {
       env,
       detached: true,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: diagnosticNative
+        ? ["pipe", "pipe", "pipe", "pipe"]
+        : ["pipe", "pipe", "pipe"],
     });
   } catch (error) {
     return {
@@ -540,6 +496,65 @@ async function helper(
       inputError: null,
       error: errorText(error),
     };
+  } finally {
+    finishSpawn?.();
+  }
+  const lifecycle: NonNullable<HelperResult["lifecycle"]> = {
+    spawnPid: child.pid ?? null,
+    requestedNs: start.toString(),
+    spawnReturnedNs: now().toString(),
+    spawnEventObservedNs: null,
+    stdinFinishedObservedNs: null,
+    exitObservedNs: null,
+    closeObservedNs: null,
+  };
+  child.once("spawn", () => {
+    lifecycle.spawnEventObservedNs = now().toString();
+  });
+  child.stdin!.once("finish", () => {
+    lifecycle.stdinFinishedObservedNs = now().toString();
+  });
+  child.once("exit", () => {
+    lifecycle.exitObservedNs = now().toString();
+  });
+  child.once("close", () => {
+    lifecycle.closeObservedNs = now().toString();
+  });
+  const diagnostic: NonNullable<HelperResult["diagnostic"]> = {
+    invalidRecords: 0,
+    overflow: false,
+    trailingBytes: 0,
+    records: [],
+  };
+  let diagnosticCarry = Buffer.alloc(0);
+  if (diagnosticNative) {
+    child.stdio[3]!.on("data", (bytes: Buffer) => {
+      if (bytes.length + diagnosticCarry.length > 1024)
+        diagnostic.overflow = true;
+      diagnosticCarry = Buffer.concat([
+        diagnosticCarry,
+        bytes.subarray(0, Math.max(0, 1024 - diagnosticCarry.length)),
+      ]);
+      while (diagnosticCarry.length >= 32) {
+        const packet = diagnosticCarry.subarray(0, 32);
+        const stage = packet.readUInt32LE(4);
+        if (packet.readUInt32LE(0) !== 0x50414754 || stage < 1 || stage > 14)
+          diagnostic.invalidRecords++;
+        else if (diagnostic.records.length >= 32) diagnostic.overflow = true;
+        else
+          diagnostic.records.push({
+            stage,
+            pid: packet.readUInt32LE(8),
+            detail: packet.readInt32LE(12),
+            uptimeNs: packet.readBigUInt64LE(16).toString(),
+            threadCpuNs: packet.readBigUInt64LE(24).toString(),
+          });
+        diagnosticCarry = diagnosticCarry.subarray(32);
+      }
+    });
+    child.stdio[3]!.on("error", () => {
+      diagnostic.invalidRecords++;
+    });
   }
   children.add(child);
   let stdoutBytes = 0,
@@ -587,6 +602,15 @@ async function helper(
       timedOut,
       inputError,
       error: failure,
+      lifecycle,
+      ...(diagnosticNative
+        ? {
+            diagnostic: {
+              ...diagnostic,
+              trailingBytes: diagnosticCarry.length,
+            },
+          }
+        : {}),
     };
   } finally {
     clearTimeout(timeout);
@@ -608,36 +632,7 @@ function helperSafe(result: HelperResult): boolean {
   );
 }
 async function send(bytes: Buffer, path: string): Promise<WireResult> {
-  const start = now();
-  let connected = false,
-    written = false;
-  let failure: string | null = null;
-  const socket = createConnection(path);
-  sockets.add(socket);
-  const timeout = setTimeout(() => {
-    failure = "500ms client watchdog";
-    socket.destroy();
-  }, 500);
-  try {
-    return await new Promise<WireResult>((done) => {
-      socket.once("connect", () => {
-        connected = true;
-        socket.end(bytes, () => {
-          written = true;
-        });
-      });
-      socket.once("error", (error) => {
-        failure = errorText(error);
-      });
-      socket.once("close", () =>
-        done({ connected, written, elapsedMs: msSince(start), error: failure }),
-      );
-    });
-  } finally {
-    clearTimeout(timeout);
-    socket.destroy();
-    sockets.delete(socket);
-  }
+  return sendWire(bytes, path, sockets, abort.signal, driverTrace?.begin);
 }
 
 async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
@@ -686,82 +681,87 @@ async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
       live.delete(socket);
     });
     socket.on("data", (chunk: Buffer) => {
-      const processingStarted = now();
-      if (finished) {
-        failures.add("Helper wrote trailing data after its frame");
-        return;
-      }
-      if (buffer.length + chunk.length > 1024) {
-        failures.add("Normal helper wire frame exceeded 1024 bytes");
-        finished = true;
-        socket.destroy();
-        return;
-      }
-      buffer = Buffer.concat([buffer, chunk]);
-      currentBytes += chunk.length;
-      bytesHighWater = Math.max(bytesHighWater, currentBytes);
-      if (!buffer.includes(10)) return;
-      finished = true;
-      const frame = decodeFrame(buffer);
-      if (
-        !frame ||
-        frame.epoch !== endpoint.epoch ||
-        frame.token !== endpoint.token
-      ) {
-        failures.add(
-          "Native helper emitted an invalid/authentication-mismatched frame",
-        );
-        socket.destroy();
-        return;
-      }
-      const slot = lookup.get(canonical(frame.event));
-      const key = slot?.key ?? "warmup-or-probe";
-      if (captured.length >= 1600) {
-        failures.add("Capture manifest bound exceeded");
-        socket.destroy();
-        return;
-      }
-      const record: Capture = {
-        key,
-        bytes: buffer.length,
-        sha256: sha256(buffer),
-        atNs: processingStarted.toString(),
-        eventId: frame.eventId,
-        forwardingStartedNs: null,
-        forwardedNs: null,
-        processingMs: 0,
-      };
-      captured.push(record);
-      if (slot && (slot.index % 20 === 1 || slot.index % 20 === 7)) {
-        if (!originals.has(slot.key)) {
-          if (originals.size >= 120)
-            failures.add("Replay source cache bound exceeded");
-          else
-            originals.set(slot.key, {
-              bytes: Buffer.from(buffer),
-              sha256: record.sha256,
-              eventId: frame.eventId,
-            });
+      const finishCapture = driverTrace?.begin("driver.capture");
+      try {
+        const processingStarted = now();
+        if (finished) {
+          failures.add("Helper wrote trailing data after its frame");
+          return;
         }
-      }
-      const bytes = buffer;
-      const task = (async () => {
-        record.forwardingStartedNs = now().toString();
-        const result = await send(bytes, endpoint.socketPath);
-        if (!result.written || result.error)
-          failures.add(
-            `Proxy forwarding failed: ${result.error ?? "frame not written"}`,
-          );
-        else record.forwardedNs = now().toString();
-      })();
-      record.processingMs = msSince(processingStarted);
-      pending.add(task);
-      void task
-        .finally(() => {
-          pending.delete(task);
+        if (buffer.length + chunk.length > 1024) {
+          failures.add("Normal helper wire frame exceeded 1024 bytes");
+          finished = true;
           socket.destroy();
-        })
-        .catch((error: unknown) => failures.add(errorText(error)));
+          return;
+        }
+        buffer = Buffer.concat([buffer, chunk]);
+        currentBytes += chunk.length;
+        bytesHighWater = Math.max(bytesHighWater, currentBytes);
+        if (!buffer.includes(10)) return;
+        finished = true;
+        const frame = decodeFrame(buffer);
+        if (
+          !frame ||
+          frame.epoch !== endpoint.epoch ||
+          frame.token !== endpoint.token
+        ) {
+          failures.add(
+            "Native helper emitted an invalid/authentication-mismatched frame",
+          );
+          socket.destroy();
+          return;
+        }
+        const slot = lookup.get(canonical(frame.event));
+        const key = slot?.key ?? "warmup-or-probe";
+        if (captured.length >= 1600) {
+          failures.add("Capture manifest bound exceeded");
+          socket.destroy();
+          return;
+        }
+        const record: Capture = {
+          key,
+          bytes: buffer.length,
+          sha256: sha256(buffer),
+          atNs: processingStarted.toString(),
+          eventId: frame.eventId,
+          forwardingStartedNs: null,
+          forwardedNs: null,
+          processingMs: 0,
+        };
+        captured.push(record);
+        if (slot && (slot.index % 20 === 1 || slot.index % 20 === 7)) {
+          if (!originals.has(slot.key)) {
+            if (originals.size >= 120)
+              failures.add("Replay source cache bound exceeded");
+            else
+              originals.set(slot.key, {
+                bytes: Buffer.from(buffer),
+                sha256: record.sha256,
+                eventId: frame.eventId,
+              });
+          }
+        }
+        const bytes = buffer;
+        const task = (async () => {
+          record.forwardingStartedNs = now().toString();
+          const result = await send(bytes, endpoint.socketPath);
+          if (!result.written || result.error)
+            failures.add(
+              `Proxy forwarding failed: ${result.error ?? "frame not written"}`,
+            );
+          else record.forwardedNs = now().toString();
+        })();
+        record.processingMs = msSince(processingStarted);
+        pending.add(task);
+        void task
+          .finally(() => {
+            pending.delete(task);
+            socket.destroy();
+          })
+          .catch((error: unknown) => failures.add(errorText(error)));
+      } finally {
+        finishCapture?.();
+      }
     });
   });
   try {
@@ -810,124 +810,6 @@ async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
       originals.clear();
       await rm(directory, { recursive: true, force: true });
     },
-  };
-}
-
-async function fixedLane(
-  count: number,
-  intervalMs: number,
-  concurrency: number,
-  start: bigint,
-  make: (index: number) => {
-    role: string;
-    bytes: number;
-    sha256: string | null;
-    replay?: boolean;
-    eventId?: string;
-    prerequisite?: string | null;
-    run: () => Promise<HelperResult | WireResult>;
-  },
-) {
-  const cpuStart = process.cpuUsage();
-  const attempts: Attempt[] = [];
-  const inFlight = new Set<Promise<void>>();
-  let maximumConcurrent = 0;
-  let primaryActive = 0,
-    replayActive = 0,
-    maximumReplayConcurrent = 0;
-  for (let index = 0; index < count; index++) {
-    const scheduled = start + BigInt(index * intervalMs) * 1_000_000n;
-    if (!abort.signal.aborted) await until(scheduled);
-    const wokeMs = msSince(start);
-    const preparationStartedMs = msSince(start);
-    const input = make(index);
-    const prepared = now();
-    const entry: Attempt = {
-      index,
-      role: input.role,
-      scheduledMs: index * intervalMs,
-      wokeMs,
-      preparationStartedMs,
-      preparedMs: Number(prepared - start) / 1e6,
-      preparedNs: prepared.toString(),
-      decisionMs: 0,
-      dispatchReturnedMs: null,
-      startedMs: null,
-      startedNs: null,
-      finishedNs: null,
-      finishedMs: null,
-      eventId: input.eventId ?? null,
-      reason: null,
-      sha256: input.sha256,
-      bytes: input.bytes,
-      result: null,
-    };
-    attempts.push(entry);
-    entry.decisionMs = msSince(start);
-    if (abort.signal.aborted) entry.reason = "aborted";
-    else if (entry.decisionMs - entry.scheduledMs >= intervalMs)
-      entry.reason = "missed-absolute-slot";
-    else if (input.replay ? replayActive >= 32 : primaryActive >= concurrency)
-      entry.reason = "concurrency-limit";
-    else if (input.prerequisite) entry.reason = input.prerequisite;
-    else {
-      const launched = now();
-      entry.startedNs = launched.toString();
-      entry.startedMs = Number(launched - start) / 1e6;
-      if (input.replay) replayActive++;
-      else primaryActive++;
-      maximumConcurrent = Math.max(maximumConcurrent, primaryActive);
-      maximumReplayConcurrent = Math.max(maximumReplayConcurrent, replayActive);
-      const task = (async () => {
-        try {
-          entry.result = await input.run();
-        } catch (error) {
-          entry.reason = `attempt-error: ${errorText(error)}`;
-        } finally {
-          const finished = now();
-          entry.finishedNs = finished.toString();
-          entry.finishedMs = Number(finished - start) / 1e6;
-          if (input.replay) replayActive--;
-          else primaryActive--;
-        }
-      })();
-      entry.dispatchReturnedMs = msSince(start);
-      inFlight.add(task);
-      void task.finally(() => inFlight.delete(task));
-    }
-  }
-  await Promise.all(inFlight);
-  return {
-    planned: count,
-    started: attempts.filter((entry) => entry.startedMs !== null).length,
-    unissued: attempts.filter((entry) => entry.startedMs === null).length,
-    maximumConcurrent,
-    maximumReplayConcurrent,
-    replayConcurrencyLimit: 32,
-    concurrencyLimit: concurrency,
-    intervalMs,
-    producerTiming: {
-      cpuMicroseconds: process.cpuUsage(cpuStart),
-      wakeDelay: distribution(
-        attempts.map((attempt) => attempt.wokeMs - attempt.scheduledMs),
-      ),
-      preparation: distribution(
-        attempts.map(
-          (attempt) => attempt.preparedMs - attempt.preparationStartedMs,
-        ),
-      ),
-      synchronousDispatch: distribution(
-        attempts.flatMap((attempt) =>
-          attempt.startedMs === null || attempt.dispatchReturnedMs === null
-            ? []
-            : [attempt.dispatchReturnedMs - attempt.startedMs],
-        ),
-      ),
-      missedSlots: diagnoseProducer(attempts, intervalMs),
-      interpretation:
-        "Wake, preparation, decision, and synchronous dispatch use the producer monotonic clock. Late wake alone does not identify OS contention, GC, or callback work. CPU totals cover the shared driver process, not an isolated lane. Every fixed slot is retained; none is backfilled.",
-    },
-    attempts,
   };
 }
 
@@ -996,9 +878,12 @@ function installRendererSampler(options: {
         .getSnapshot()
         .then((snapshot) => {
           if (stopped) return;
+          entry.snapshotResolvedMs = performance.now() - start;
           render(snapshot); // The actual production rendering closure, not an echo/ping.
+          entry.renderFinishedMs = performance.now() - start;
           raf = requestAnimationFrame(() => {
             if (stopped) return;
+            entry.rafObservedMs = performance.now() - start;
             if (watchdog) clearTimeout(watchdog);
             const canvas = document.querySelector("canvas");
             entry.latencyMs = performance.now() - dispatched;
@@ -1238,8 +1123,8 @@ function assess(
   main: MainReport,
   arm: ArmReport,
   renderer: RendererSample[],
-  lane: Awaited<ReturnType<typeof fixedLane>>,
-  uds: Awaited<ReturnType<typeof fixedLane>> | null,
+  lane: NativeLane,
+  uds: UdsReport | null,
   baselineStats: Record<string, number>,
   proxyFailures: string[],
 ) {
@@ -1733,10 +1618,16 @@ async function runOne(
   helperPath: string,
 ) {
   const home = await mkdtemp(join(tmpdir(), "pagent-transport-home-"));
+  driverTrace = createProfileTrace();
   const env = environment(home);
+  const producerAbort = new AbortController();
+  const producerSignal = AbortSignal.any([abort.signal, producerAbort.signal]);
   let application: ElectronApplication | undefined;
   let page: Page | undefined;
   let proxy: Awaited<ReturnType<typeof captureProxy>> | undefined;
+  let udsProducer: UdsProducer | undefined;
+  let watchdogCancellation: Promise<void> | undefined;
+  let nativeProducer: Promise<NativeLane> | undefined;
   let original: Endpoint | undefined;
   let descriptor: string | undefined;
   const cleanupErrors: string[] = [];
@@ -1754,9 +1645,13 @@ async function runOne(
   const watchdog = setTimeout(
     () => {
       failures.push("Run exceeded the bounded harness lifecycle watchdog");
+      producerAbort.abort(new Error("Profile lifecycle watchdog"));
       if (application) kill(application.process());
       for (const child of children) kill(child);
       for (const socket of sockets) socket.destroy();
+      watchdogCancellation = udsProducer?.cancel().catch((error: unknown) => {
+        cleanupErrors.push(`Watchdog UDS cancellation: ${errorText(error)}`);
+      });
     },
     profile === "N" ? 240_000 : 190_000,
   );
@@ -1904,27 +1799,24 @@ async function runOne(
       );
     const endpoint = original;
     const wirePreparationStarted = now();
-    // Fixed inputs and hashes are prepared before the absolute load schedule.
-    // Only native replay bytes depend on frames captured during the load.
-    const preparedWires =
-      profile === "O"
-        ? Array.from({ length: 2000 }, (_, index) => {
-            const frame = wire(index, endpoint);
-            return { ...frame, sha256: sha256(frame.bytes) };
-          })
-        : [];
+    // Readiness joins worker startup and fixed input/hash preparation before
+    // either app or producer is armed. Only native replays depend on load data.
+    if (profile === "O")
+      udsProducer = await prepareUdsProducer(endpoint, {
+        workerUrl: new URL("./profile-uds-worker.mjs", import.meta.url),
+        signal: producerSignal,
+      });
     record.producerPreparation = {
       elapsedMs: msSince(wirePreparationStarted),
-      wireFrames: preparedWires.length,
-      retainedWireBytes: preparedWires.reduce(
-        (total, frame) => total + frame.bytes.length,
-        0,
-      ),
+      wireFrames: udsProducer?.preparation.wireFrames ?? 0,
+      retainedWireBytes: udsProducer?.preparation.retainedWireBytes ?? 0,
+      worker: udsProducer?.preparation ?? null,
       scope:
-        "Bounded driver-only input preparation before arming; not collector or main RSS.",
+        "Bounded fixture-only worker input preparation/readiness joined before arming; not collector or main RSS. Worker sockets/timers do not share the driver's synchronous helper-spawn thread.",
     };
     proxy.beginLoad();
     const start = now() + 1_000_000_000n;
+    await udsProducer?.start(start);
     const arm = await application.evaluate(
       (_, args) =>
         (
@@ -1938,7 +1830,7 @@ async function runOne(
       durationMs: duration,
     });
     const captured = proxy;
-    const lanePromise = fixedLane(
+    nativeProducer = fixedLane<HelperResult | WireResult>(
       slots.length,
       50,
       profile === "N" ? 4 : 8,
@@ -1969,21 +1861,12 @@ async function runOne(
               : helper(command, env, bytes!),
         };
       },
+      producerSignal,
+      undefined,
+      driverTrace.begin,
     );
-    const udsPromise =
-      profile === "O"
-        ? fixedLane(2000, 5, 32, start, (index) => {
-            const frame = preparedWires[index]!;
-            return {
-              role: frame.role,
-              eventId: frame.eventId,
-              bytes: frame.bytes.length,
-              sha256: frame.sha256,
-              run: () => send(frame.bytes, endpoint.socketPath),
-            };
-          })
-        : Promise.resolve(null);
-    const [lane, uds] = await Promise.all([lanePromise, udsPromise]);
+    const udsPromise = udsProducer?.result ?? Promise.resolve(null);
+    const [lane, uds] = await Promise.all([nativeProducer, udsPromise]);
     await until(start + BigInt(duration + 30_000) * 1_000_000n);
     const renderer = await page.evaluate(() =>
       (
@@ -2059,7 +1942,7 @@ async function runOne(
               const frame = capturesByKey.get(slot.key);
               return {
                 key: slot.key,
-                predecessor: slot.predecessor,
+                predecessors: slot.predecessors,
                 eventId: attempt.eventId ?? frame?.eventId ?? null,
                 preparedNs: attempt.preparedNs,
                 startedNs: attempt.startedNs,
@@ -2126,16 +2009,31 @@ async function runOne(
           "captured envelope unchanged; independent helper invocations are not replays",
         ),
         check(
-          "fixed corpus predecessor delivery order",
-          orderDiagnostics.length === 1140 &&
-            orderDiagnostics.every((entry) => entry.status === "ordered"),
+          "fixed corpus causal issuance order",
+          orderDiagnostics.length === 1612 &&
+            orderDiagnostics.every((entry) => entry.issuance === "ordered"),
           {
             edges: orderDiagnostics.length,
             failures: orderDiagnostics.filter(
-              (entry) => entry.status !== "ordered",
+              (entry) => entry.issuance !== "ordered",
             ),
           },
-          "1140 predecessor edges proven by actual collector receipts; missing/unissued/ambiguous evidence fails but is not an inversion",
+          "1612 fixture-required edges (60 × 26 within-block + 52 same-root turn boundaries) must be issued in causal order. Missing/unissued predecessors fail; no backfill or resequencing. This does not prove provider semantics or correct handling of reversed arrivals.",
+        ),
+        check(
+          "fixed corpus admission completeness and attribution",
+          orderDiagnostics.length === 1612 &&
+            orderDiagnostics.every((entry) => entry.admission === "observed"),
+          {
+            edges: orderDiagnostics.length,
+            failures: orderDiagnostics.filter(
+              (entry) => entry.admission !== "observed",
+            ),
+            arrivalReversals: orderDiagnostics.filter(
+              (entry) => entry.stages.collectorAdmission.order === "reversed",
+            ),
+          },
+          "Every causal edge has unambiguous non-overflow admissions. Arrival order is recorded, not assumed to be FIFO across independent helpers; out-of-order state semantics require separate evidence.",
         ),
       );
     assessment.measuredTransportPassed = assessment.checks.every(
@@ -2232,17 +2130,32 @@ async function runOne(
       failures.push(
         "App-off sequential 100-call N startup/cumulative budgets failed",
       );
-    record.transportPassed = failures.length === 0;
+    record.acceptanceEligible = !diagnosticNative;
+    record.measuredChecksPassed = failures.length === 0;
+    record.transportPassed = !diagnosticNative && failures.length === 0;
     // Transport evidence is useful but intentionally cannot certify slice1b.
-    record.passed = failures.length === 0 && unmetEvidence.length === 0;
+    record.passed =
+      !diagnosticNative && failures.length === 0 && unmetEvidence.length === 0;
   } catch (error) {
     failures.push(errorText(error));
   } finally {
     clearTimeout(watchdog);
+    producerAbort.abort(new Error("Profile cleanup"));
+    await watchdogCancellation;
+    if (udsProducer) {
+      try {
+        await udsProducer.cancel();
+        record.udsProducerCleanup = { joined: true, atNs: now().toString() };
+      } catch (error) {
+        record.udsProducerCleanup = { joined: false };
+        cleanupErrors.push(`UDS worker cleanup: ${errorText(error)}`);
+      }
+    }
     await stopChildren().catch((error: unknown) =>
       cleanupErrors.push(`Child cleanup: ${errorText(error)}`),
     );
     for (const socket of sockets) socket.destroy();
+    if (nativeProducer) await Promise.allSettled([nativeProducer]);
     if (proxy)
       await proxy
         .close()
@@ -2294,11 +2207,18 @@ async function runOne(
       record.transportPassed = false;
       record.passed = false;
     }
+    driverTrace.close();
+    record.driverTrace = driverTrace.report();
+    driverTrace = undefined;
   }
   return record;
 }
 
-export async function runProfiles(options: { profiles: Profile[] }) {
+export async function runProfiles(options: {
+  profiles: Profile[];
+  diagnosticNative?: boolean;
+}) {
+  diagnosticNative = options.diagnosticNative === true;
   const results: Record<string, unknown>[] = [];
   const runErrors: string[] = [];
   const onSignal = (): void => {
@@ -2316,6 +2236,12 @@ export async function runProfiles(options: { profiles: Profile[] }) {
     repetitions: 3,
     fullContractSelection: options.profiles.length === 2,
     passed: false,
+    diagnosticNative,
+    acceptanceEligible: !diagnosticNative,
+    orderAssessmentBasis:
+      "Approved fixed-corpus contract: causally valid issuance plus complete, unambiguous admission. Reception reversals remain recorded observations, not an invented cross-process FIFO guarantee. This supersedes the old receipt-order predicate without reclassifying preserved reports or proving out-of-order state semantics.",
+    diagnosticClockNote:
+      "Native uptimeNs and current-thread CPU are interpreted as within-helper deltas. Parent *ObservedNs fields are driver observations, not child execution timestamps; no cross-runtime epoch equivalence is assumed.",
     runs: results,
     errors: runErrors,
     limits: {
@@ -2354,7 +2280,7 @@ export async function runProfiles(options: { profiles: Profile[] }) {
     cachePolicy:
       "No forced GC or cache purge; first invocation does not mean forced cold cache",
     clock:
-      "process.hrtime.bigint monotonic startup/input clocks; renderer local performance.now duration; Date used only to align renderer schedule",
+      "process.hrtime.bigint monotonic startup/input clocks shared by driver and isolated UDS worker; renderer local performance.now duration; Date used only to align renderer schedule",
     missingEnvironmentEvidence: [
       "Claude Code is deliberately not invoked and user installations/settings are not inspected; its installed version and provider-schema provenance are unverified.",
     ],
@@ -2371,18 +2297,19 @@ export async function runProfiles(options: { profiles: Profile[] }) {
       throw new Error(
         "Select N, O, or both exactly once; each selection always runs three repetitions",
       );
+    const packageDirectory = diagnosticNative
+      ? `pagent-diagnostic-darwin-${process.arch}`
+      : `pagent-darwin-${process.arch}`;
     const executable = resolve(
-      `build/pagent-darwin-${process.arch}/pagent.app/Contents/MacOS/pagent`,
+      `build/${packageDirectory}/pagent.app/Contents/MacOS/pagent`,
     );
     const helperPath = resolve(
-      `build/pagent-darwin-${process.arch}/pagent.app/Contents/Resources/helpers/pagent-hook-emitter`,
+      `build/${packageDirectory}/pagent.app/Contents/Resources/helpers/pagent-hook-emitter`,
     );
     const electronExecutable = createRequire(import.meta.url)(
       "electron",
     ) as string;
-    const appRoot = resolve(
-      `build/pagent-darwin-${process.arch}/pagent.app/Contents`,
-    );
+    const appRoot = resolve(`build/${packageDirectory}/pagent.app/Contents`);
     const macos = await execute("/usr/bin/sw_vers", ["-productVersion"], {
       timeout: 5000,
       maxBuffer: 4096,
@@ -2419,11 +2346,16 @@ export async function runProfiles(options: { profiles: Profile[] }) {
         electronExecutable,
         join(appRoot, "Resources", "app.asar"),
         "dist/main/profile.js",
+        "dist/main/profile-driver.mjs",
+        "dist/main/profile-uds-worker.mjs",
         "dist/renderer/pet/index.js",
         "dist/preload/index.cjs",
         "tests/profiles/main.ts",
         "tests/profiles/transport.ts",
         "tests/profiles/order.ts",
+        "tests/profiles/uds-producer.ts",
+        "tests/profiles/uds-worker.ts",
+        "tests/profiles/trace.ts",
         "scripts/profile-transport.mjs",
         "src/main/desktop.ts",
         "src/main/snapshot-publisher.ts",
@@ -2433,6 +2365,8 @@ export async function runProfiles(options: { profiles: Profile[] }) {
         "src/domain/observations.ts",
         "native/hook-emitter/Sources/HookProtocol/EventProjection.swift",
         "native/hook-emitter/Sources/HookEmitter/main.swift",
+        "native/hook-emitter/Sources/HookEmitter/DiagnosticTrace.swift",
+        "scripts/build-diagnostic-helper.mjs",
         "src/integration/claude/hook-install.ts",
       ].map(hashFile),
     );
@@ -2464,7 +2398,11 @@ export async function runProfiles(options: { profiles: Profile[] }) {
     report.transportPassed =
       results.length === options.profiles.length * 3 &&
       results.every((run) => run.transportPassed === true);
+    report.measuredChecksPassed =
+      results.length === options.profiles.length * 3 &&
+      results.every((run) => run.measuredChecksPassed === true);
     report.passed =
+      !diagnosticNative &&
       results.length === 6 &&
       results.every((run) => run.passed === true) &&
       runErrors.length === 0 &&

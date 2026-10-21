@@ -1,6 +1,6 @@
 export type OrderInput = {
   key: string;
-  predecessor: string | null;
+  predecessors: readonly string[];
   eventId: string | null;
   preparedNs: string | null;
   startedNs: string | null;
@@ -19,6 +19,45 @@ export type OrderReceipt = {
 };
 type Comparison = "ordered" | "reversed" | "unobserved";
 type Admission = OrderReceipt | "ambiguous" | null;
+
+// The approved N fixture has six parallel tools, two candidate wait pairs,
+// a turn boundary, and two exact-envelope replays. These dependencies are
+// fixture intent, not evidence of provider wait/clear semantics. Independent
+// tools and replays need not arrive in their scheduled total order. Issuance
+// validity and observed admission order are separate evidence boundaries.
+const normalBlockPredecessors = [
+  [],
+  [0],
+  [0],
+  [0],
+  [0],
+  [0],
+  [0],
+  [0],
+  [0],
+  [8],
+  [7],
+  [1],
+  [2],
+  [3],
+  [4],
+  [5],
+  [6],
+  [9, 10, 11, 12, 13, 14, 15, 16],
+  [1],
+  [7],
+] as const;
+
+export function normalCorpusPredecessors(index: number): number[] {
+  const step = index % 20;
+  const blockStart = index - step;
+  // Blocks are round-robin across eight roots. The next turn on a root must
+  // follow that root's prior turn end, not the preceding unrelated block.
+  if (step === 0 && blockStart >= 8 * 20) return [blockStart - 8 * 20 + 17];
+  return normalBlockPredecessors[step]!.map(
+    (predecessor) => blockStart + predecessor,
+  );
+}
 
 function compare(
   predecessor: string | null | undefined,
@@ -84,46 +123,48 @@ export function diagnoseOrder(
       );
     }
   }
-  return inputs.flatMap((input) => {
-    if (input.predecessor === null) return [];
-    const predecessor = byKey.get(input.predecessor);
-    const previousReceipt = admissions.get(input.predecessor) ?? null;
-    const receipt = admissions.get(input.key) ?? null;
-    const admissionOrder =
-      previousReceipt === "ambiguous" || receipt === "ambiguous"
-        ? "ambiguous"
-        : previousReceipt === null || receipt === null
-          ? "unobserved"
-          : previousReceipt.receivedSeq < receipt.receivedSeq
-            ? "ordered"
-            : "reversed";
-    const status =
-      input.startedNs === null
-        ? "input-unissued"
-        : predecessor === undefined
-          ? "predecessor-missing"
-          : predecessor.startedNs === null
-            ? "predecessor-unissued"
-            : previousReceipt === "ambiguous" || receipt === "ambiguous"
-              ? "admission-ambiguous"
-              : previousReceipt === null || receipt === null
-                ? "admission-missing"
-                : previousReceipt.disposition === "overflow" ||
-                    receipt.disposition === "overflow"
-                  ? "not-admitted"
-                  : admissionOrder;
-    return [
-      {
+  return inputs.flatMap((input) =>
+    input.predecessors.map((predecessorKey) => {
+      const predecessor = byKey.get(predecessorKey);
+      const previousReceipt = admissions.get(predecessorKey) ?? null;
+      const receipt = admissions.get(input.key) ?? null;
+      const admissionOrder =
+        previousReceipt === "ambiguous" || receipt === "ambiguous"
+          ? "ambiguous"
+          : previousReceipt === null || receipt === null
+            ? "unobserved"
+            : previousReceipt.receivedSeq < receipt.receivedSeq
+              ? "ordered"
+              : "reversed";
+      const issuance =
+        input.startedNs === null
+          ? "input-unissued"
+          : predecessor === undefined
+            ? "predecessor-missing"
+            : predecessor.startedNs === null
+              ? "predecessor-unissued"
+              : compare(predecessor.startedNs, input.startedNs);
+      const admission =
+        previousReceipt === "ambiguous" || receipt === "ambiguous"
+          ? "admission-ambiguous"
+          : previousReceipt === null || receipt === null
+            ? "admission-missing"
+            : previousReceipt.disposition === "overflow" ||
+                receipt.disposition === "overflow"
+              ? "not-admitted"
+              : "observed";
+      return {
         key: input.key,
-        predecessor: input.predecessor,
-        status,
+        predecessor: predecessorKey,
+        issuance,
+        admission,
         inputReason: input.reason,
         predecessorReason: predecessor?.reason ?? null,
         stages: {
           preparation: compare(predecessor?.preparedNs, input.preparedNs),
           launch: compare(predecessor?.startedNs, input.startedNs),
           nativeCapture: compare(
-            captured.get(input.predecessor)?.atNs,
+            captured.get(predecessorKey)?.atNs,
             captured.get(input.key)?.atNs,
           ),
           forwardingCompleted: compare(
@@ -136,9 +177,9 @@ export function diagnoseOrder(
             current: receipt,
           },
         },
-      },
-    ];
-  });
+      };
+    }),
+  );
 }
 
 export type ProducerTiming = {

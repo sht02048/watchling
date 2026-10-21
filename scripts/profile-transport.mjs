@@ -1,12 +1,16 @@
 import { build, stop } from "esbuild";
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, cp, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // Full contract: node scripts/profile-transport.mjs
 // Debug selection (still three fresh runs): --profile N or --profile O
-const args = process.argv.slice(2);
+const supplied = process.argv.slice(2);
+if (supplied.filter((value) => value === "--diagnostic").length > 1)
+  throw new Error("Duplicate diagnostic option");
+const diagnosticNative = supplied.includes("--diagnostic");
+const args = supplied.filter((value) => value !== "--diagnostic");
 let profiles = ["N", "O"];
 if (args.length) {
   if (
@@ -15,12 +19,13 @@ if (args.length) {
     !["N", "O"].includes(args[1])
   )
     throw new Error(
-      "Usage: node scripts/profile-transport.mjs [--profile N|O]",
+      "Usage: node scripts/profile-transport.mjs [--profile N|O] [--diagnostic]",
     );
   profiles = [args[1]];
 }
 const output = resolve("test-results/transport-profile.json");
 let buildProcess;
+let interrupted = false;
 const stopBuild = () => {
   if (!buildProcess?.pid) return;
   try {
@@ -29,8 +34,15 @@ const stopBuild = () => {
     buildProcess.kill("SIGKILL");
   }
 };
-process.once("SIGINT", stopBuild);
-process.once("SIGTERM", stopBuild);
+const interruptBuild = () => {
+  interrupted = true;
+  stopBuild();
+};
+const checkInterrupted = () => {
+  if (interrupted) throw new Error("Profile build interrupted");
+};
+process.once("SIGINT", interruptBuild);
+process.once("SIGTERM", interruptBuild);
 try {
   // The public CLI and helper MUST come from this freshly built local package.
   await new Promise((done, reject) => {
@@ -45,8 +57,54 @@ try {
       else reject(new Error(`Local app build failed (${code ?? signal})`));
     });
   });
-  process.removeListener("SIGINT", stopBuild);
-  process.removeListener("SIGTERM", stopBuild);
+  checkInterrupted();
+  if (diagnosticNative) {
+    await mkdir(resolve("build/verification"), { recursive: true });
+    const directory = await mkdtemp(
+      resolve("build/verification/native-trace-helper-"),
+    );
+    checkInterrupted();
+    await new Promise((done, reject) => {
+      buildProcess = spawn(
+        process.execPath,
+        ["scripts/build-diagnostic-helper.mjs", directory],
+        {
+          stdio: "inherit",
+          detached: true,
+        },
+      );
+      buildProcess.once("error", reject);
+      buildProcess.once("close", (code, signal) => {
+        buildProcess = undefined;
+        if (code === 0) done();
+        else
+          reject(
+            new Error(`Diagnostic helper build failed (${code ?? signal})`),
+          );
+      });
+    });
+    checkInterrupted();
+    const manifest = JSON.parse(
+      await readFile(resolve(directory, "manifest.json"), "utf8"),
+    );
+    checkInterrupted();
+    const diagnosticApp = resolve(
+      `build/pagent-diagnostic-darwin-${process.arch}/pagent.app`,
+    );
+    await rm(diagnosticApp, { recursive: true, force: true });
+    checkInterrupted();
+    await cp(
+      resolve(`build/pagent-darwin-${process.arch}/pagent.app`),
+      diagnosticApp,
+      { recursive: true, verbatimSymlinks: true },
+    );
+    checkInterrupted();
+    await cp(
+      manifest.binaryPath,
+      resolve(diagnosticApp, "Contents/Resources/helpers/pagent-hook-emitter"),
+    );
+    checkInterrupted();
+  }
   await build({
     entryPoints: ["tests/profiles/main.ts"],
     outfile: "dist/main/profile.js",
@@ -56,10 +114,12 @@ try {
     external: ["electron"],
     target: "node24",
   });
+  checkInterrupted();
   // Fixture-only access to the existing render closure, not a new product IPC
   // endpoint or a synthetic echo renderer. The already packaged app is untouched.
   const rendererPath = resolve("src/renderer/pet/index.ts");
   const renderer = await readFile(rendererPath, "utf8");
+  checkInterrupted();
   await build({
     stdin: {
       contents:
@@ -75,6 +135,16 @@ try {
     format: "esm",
     target: "chrome140",
   });
+  checkInterrupted();
+  await build({
+    entryPoints: ["tests/profiles/uds-worker.ts"],
+    outfile: "dist/main/profile-uds-worker.mjs",
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+  });
+  checkInterrupted();
   await build({
     entryPoints: ["tests/profiles/transport.ts"],
     outfile: "dist/main/profile-driver.mjs",
@@ -85,11 +155,15 @@ try {
     external: ["electron"],
     target: "node24",
   });
+  checkInterrupted();
   stop();
   const { runProfiles } = await import(
     pathToFileURL(resolve("dist/main/profile-driver.mjs")).href
   );
-  const result = await runProfiles({ profiles });
+  checkInterrupted();
+  process.removeListener("SIGINT", interruptBuild);
+  process.removeListener("SIGTERM", interruptBuild);
+  const result = await runProfiles({ profiles, diagnosticNative });
   console.log(JSON.stringify(result));
   if (!result.passed) process.exitCode = 1;
 } catch (error) {
@@ -114,6 +188,6 @@ try {
   process.exitCode = 1;
 } finally {
   stop();
-  process.removeListener("SIGINT", stopBuild);
-  process.removeListener("SIGTERM", stopBuild);
+  process.removeListener("SIGINT", interruptBuild);
+  process.removeListener("SIGTERM", interruptBuild);
 }

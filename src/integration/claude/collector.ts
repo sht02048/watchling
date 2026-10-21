@@ -48,6 +48,8 @@ export interface CollectorOptions {
   onReceipt?: (receipt: TransportReceipt) => void;
   // Dependency injection for deterministic drain-only saturation tests; never IPC.
   scheduleDrain?: (callback: () => void) => () => void;
+  // Optional in-process fixture timing; no provider data or renderer surface.
+  trace?: (operation: string) => () => void;
 }
 export interface CollectorStats {
   // Admitted frames: queued unique emissions plus authenticated exact replays.
@@ -304,26 +306,31 @@ export async function startCollector(options: CollectorOptions) {
     }
   }
   function drain(): void {
-    cancelDrain = undefined;
-    if (closing) return;
-    const start = performance.now();
-    for (
-      let count = 0;
-      count < 16 && queue.length && performance.now() - start < 4;
-      count++
-    ) {
-      const { event, eventId, receivedSeq, bytes } = queue.shift()!;
-      queuedBytes -= bytes;
-      checkBounds();
-      try {
-        options.onEvent(event, { eventId, receivedSeq });
-        counters.delivered++;
-      } catch {
-        counters.consumerFailures++;
-        loss("consumer-failed");
+    const finishTrace = options.trace?.("collector.drain");
+    try {
+      cancelDrain = undefined;
+      if (closing) return;
+      const start = performance.now();
+      for (
+        let count = 0;
+        count < 16 && queue.length && performance.now() - start < 4;
+        count++
+      ) {
+        const { event, eventId, receivedSeq, bytes } = queue.shift()!;
+        queuedBytes -= bytes;
+        checkBounds();
+        try {
+          options.onEvent(event, { eventId, receivedSeq });
+          counters.delivered++;
+        } catch {
+          counters.consumerFailures++;
+          loss("consumer-failed");
+        }
       }
+      if (queue.length) cancelDrain = schedule(drain);
+    } finally {
+      finishTrace?.();
     }
-    if (queue.length) cancelDrain = schedule(drain);
   }
   function authenticated(epoch: unknown, token: unknown): boolean {
     return (
@@ -423,31 +430,36 @@ export async function startCollector(options: CollectorOptions) {
         socket.destroy();
       });
       socket.on("data", (chunk) => {
-        if (finished) return;
-        if (buffer.length + chunk.length > MAX_FRAME_BYTES) {
-          counters.overflow++;
-          malformed(buffer);
-          releaseBuffer();
+        const finishTrace = options.trace?.("collector.frame");
+        try {
+          if (finished) return;
+          if (buffer.length + chunk.length > MAX_FRAME_BYTES) {
+            counters.overflow++;
+            malformed(buffer);
+            releaseBuffer();
+            finished = true;
+            socket.destroy();
+            return;
+          }
+          buffer = Buffer.concat([buffer, chunk]);
+          connectionBytes += chunk.length;
+          checkBounds();
+          const newline = buffer.indexOf(10);
+          if (newline === -1) return;
           finished = true;
+          if (newline !== buffer.length - 1) malformed(buffer);
+          else {
+            const frame = decodeFrame(buffer);
+            if (!frame) malformed(buffer);
+            else if (!authenticated(frame.epoch, frame.token))
+              counters.rejected++;
+            else admit(frame, buffer.length);
+          }
+          releaseBuffer();
           socket.destroy();
-          return;
+        } finally {
+          finishTrace?.();
         }
-        buffer = Buffer.concat([buffer, chunk]);
-        connectionBytes += chunk.length;
-        checkBounds();
-        const newline = buffer.indexOf(10);
-        if (newline === -1) return;
-        finished = true;
-        if (newline !== buffer.length - 1) malformed(buffer);
-        else {
-          const frame = decodeFrame(buffer);
-          if (!frame) malformed(buffer);
-          else if (!authenticated(frame.epoch, frame.token))
-            counters.rejected++;
-          else admit(frame, buffer.length);
-        }
-        releaseBuffer();
-        socket.destroy();
       });
       socket.resume();
     },

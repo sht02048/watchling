@@ -39,6 +39,7 @@ export interface DesktopOptions {
   onStarted?: (controls: DesktopControls) => void;
   onTransportReceipt?: (receipt: TransportReceipt) => void;
   onSnapshotAccounting?: (record: SnapshotAccounting) => void;
+  trace?: CollectorOptions["trace"];
 }
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -299,8 +300,13 @@ async function start(options: DesktopOptions): Promise<void> {
   );
   publisher = createSnapshotPublisher({
     getSnapshot: () => {
-      snapshot = observations.snapshot();
-      return snapshot;
+      const finishTrace = options.trace?.("snapshot.materialize");
+      try {
+        snapshot = observations.snapshot();
+        return snapshot;
+      } finally {
+        finishTrace?.();
+      }
     },
     getTargets: () =>
       [pet, list]
@@ -313,8 +319,14 @@ async function start(options: DesktopOptions): Promise<void> {
         )
         .map((window) => ({
           id: window.id,
-          send: (value: Snapshot) =>
-            window.webContents.send("pagent:snapshot-changed", value),
+          send: (value: Snapshot) => {
+            const finishTrace = options.trace?.("snapshot.send");
+            try {
+              window.webContents.send("pagent:snapshot-changed", value);
+            } finally {
+              finishTrace?.();
+            }
+          },
         })),
     ...(options.onSnapshotAccounting
       ? { onAccounting: options.onSnapshotAccounting }
@@ -323,6 +335,7 @@ async function start(options: DesktopOptions): Promise<void> {
   try {
     collector = await startCollector({
       directory: app.getPath("userData"),
+      ...(options.trace ? { trace: options.trace } : {}),
       ...(options.onTransportReceipt
         ? { onReceipt: options.onTransportReceipt }
         : {}),
@@ -346,14 +359,19 @@ async function start(options: DesktopOptions): Promise<void> {
   screen.on("display-removed", keepOnScreen);
   screen.on("display-metrics-changed", keepOnScreen);
   timer = setInterval(() => {
-    if (!pet?.isVisible() || pet.webContents.isDestroyed()) return;
-    const cursor = screen.getCursorScreenPoint();
-    updateDrag(cursor);
-    const bounds = pet.getBounds();
-    pet.webContents.send("pagent:cursor", {
-      x: cursor.x - bounds.x,
-      y: cursor.y - bounds.y,
-    });
+    const finishTrace = options.trace?.("desktop.cursor-tick");
+    try {
+      if (!pet?.isVisible() || pet.webContents.isDestroyed()) return;
+      const cursor = screen.getCursorScreenPoint();
+      updateDrag(cursor);
+      const bounds = pet.getBounds();
+      pet.webContents.send("pagent:cursor", {
+        x: cursor.x - bounds.x,
+        y: cursor.y - bounds.y,
+      });
+    } finally {
+      finishTrace?.();
+    }
   }, 50);
   if (!quitting) showPet();
   options.onStarted?.({
