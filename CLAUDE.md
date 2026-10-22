@@ -16,7 +16,10 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 | `pnpm make` | `package` plus the DMG in `build/release/make/dmg/arm64/` and the unfused app for Playwright in `build/unfused/` |
 | `pnpm release` | Builds the DMG and uploads it to a draft GitHub release of `sht02048/watchling`. Needs `GITHUB_TOKEN`; publishes outside the machine, so run only when asked. |
 | `pnpm playground` | Browser labs for pet states, companions and the asking cue at http://127.0.0.1:5178/ |
-| `pnpm format` | Prettier |
+| `pnpm lint` / `pnpm lint:fix` | oxlint (`.oxlintrc.json`) |
+| `pnpm format` / `pnpm format:check` | oxfmt (`.oxfmtrc.json`); Markdown is left unformatted |
+
+`pnpm install` installs the Lefthook pre-commit hook (`lefthook.yml`): `oxlint --fix` and `oxfmt` on staged files, re-staging their fixes, then `pnpm typecheck`.
 
 ## Layout
 

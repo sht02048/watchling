@@ -2,6 +2,7 @@ allowBuilds:
   electron: true
   esbuild: true
   electron-winstaller: false
+  lefthook: true
   fs-xattr: true
   macos-alias: true
 

@@ -1,0 +1,15 @@
+pre-commit:
+  jobs:
+    - name: lint
+      glob: "*.{js,mjs,cjs,ts,mts,cts,tsx}"
+      run: pnpm exec oxlint --fix {staged_files}
+      stage_fixed: true
+    - name: format
+      glob: "*.{js,mjs,cjs,ts,mts,cts,tsx,json,jsonc,yml,yaml,css,html}"
+      exclude:
+        - pnpm-lock.yaml
+      run: pnpm exec oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    - name: typecheck
+      glob: "*.{ts,mts,cts,tsx}"
+      run: pnpm typecheck

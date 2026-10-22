@@ -6,7 +6,6 @@
   "license": "MIT",
   "type": "module",
   "main": ".vite/build/main.cjs",
-  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "package": "electron-forge package",
     "build:helper": "swift build --package-path native/hook-emitter -c release",
@@ -20,7 +19,10 @@
     "test:integration": "pnpm build:helper && node --experimental-strip-types --test tests/integration/*.test.ts",
     "test:packaged": "pnpm make && node --experimental-strip-types --test tests/packaged/*.test.ts",
     "test:e2e": "pnpm package && playwright test",
-    "format": "prettier --write src scripts tests package.json tsconfig.json playwright.config.ts forge.config.mts vite.*.config.mts"
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
   },
   "devDependencies": {
     "@electron-forge/cli": "8.0.1",
@@ -34,8 +36,11 @@
     "@types/node": "^24.0.0",
     "electron": "44.9.2",
     "esbuild": "0.28.2",
-    "prettier": "^3.6.0",
+    "lefthook": "2.2.2",
+    "oxfmt": "0.74.0",
+    "oxlint": "1.89.0",
     "typescript": "7.0.2",
     "vite": "8.3.5"
-  }
+  },
+  "packageManager": "pnpm@10.33.0"
 }
