@@ -42,6 +42,7 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 - **Do not build while `pnpm dev` runs.** `pnpm package`, `pnpm make`, `test:e2e` and `test:packaged` rewrite `.vite/build/` with the production bundle, which the next `r` restart would load.
 - **Verify UI in a real Electron window.** The app CSP is strict (`img-src 'self'`, `style-src 'self'`, `script-src 'self'`), so `data:` URLs, `<style>` blocks and `style=""` attributes that work in a plain browser do not render in the app. Setting styles from scripts through `element.style` still works. Draw icons as inline SVG elements.
 - **English** for all code, UI text, tests and docs. Match surrounding style; add comments only for non-obvious constraints.
+- **Commit messages and pull requests in English**, because the repository is open source. Follow the existing history: an imperative subject without gitmoji or a type prefix (`Add the Watchling app icon`), and a short body when the reason is not visible in the diff.
 
 ## Local wiki
 
