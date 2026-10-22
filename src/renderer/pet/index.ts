@@ -13,7 +13,7 @@ function render(snapshot: Snapshot): void {
   pet.setCompanions(snapshot.companions);
   canvas!.setAttribute(
     "aria-label",
-    `pagent ${stateLabels[snapshot.state]}. 클릭하여 세션 확인`,
+    `pagent ${stateLabels[snapshot.state]}. Click to see sessions`,
   );
 }
 const unsubscribeSnapshot = window.pagent.onSnapshot(render);

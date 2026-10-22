@@ -908,7 +908,7 @@ test("settings and manifest reads are bounded, including UTF-8 byte counts", asy
     await refused(manageClaudeHooks("check", false, f.paths, f.helper));
     assert.deepEqual(await tree(f.home), before);
     const small = JSON.stringify({
-      text: "한".repeat(Math.floor(SETTINGS_LIMIT / 3)),
+      text: "€".repeat(Math.floor(SETTINGS_LIMIT / 3)),
     });
     assert.ok(Buffer.byteLength(small) > SETTINGS_LIMIT);
     await writeFile(f.paths.settingsPath, small);

@@ -98,7 +98,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
           pet.webContents.send("pagent:snapshot-changed", {
             state,
             sessions: [],
-            observation: "시험 입력",
+            observation: "test input",
             companions: 0,
           });
         }, state);
@@ -139,7 +139,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
       )
       .toBe(true);
     await expect(sessionPage!.locator("#observation")).toContainText(
-      "아직 Claude Code 신호를 수신하지 않았어요",
+      "No Claude Code signals received yet",
     );
     await sessionPage!.keyboard.press("Escape");
     await expect
@@ -228,7 +228,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
           id: "fixture-",
           project: "fixture-project",
           state: "idle",
-          reason: "다음 요청을 기다리고 있어요.",
+          reason: "Waiting for the next prompt.",
         },
       ]);
     await expect(sessionPage!.locator("body")).toContainText(

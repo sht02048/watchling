@@ -8,29 +8,29 @@ import defaults from "../renderer/pet/attention.json" with { type: "json" };
 
 type NumberKey = Exclude<keyof AttentionConfig, "mode" | "seed">;
 const knobs: [NumberKey, string, number, number, number][] = [
-  ["size", "크기", 0.35, 1.1, 0.01],
-  ["offsetX", "가로 위치", -0.9, 0.9, 0.01],
-  ["height", "높이", 0.7, 1.45, 0.01],
-  ["tilt", "기울기", -0.5, 0.5, 0.01],
-  ["popDuration", "등장 시간(초)", 0.2, 1.2, 0.05],
-  ["overshoot", "등장 과장", 0, 0.9, 0.05],
-  ["interval", "버스트 간격(초)", 3, 40, 0.5],
-  ["jitter", "간격 흔들림", 0, 0.5, 0.05],
-  ["burstDuration", "버스트 길이(초)", 0.3, 1.2, 0.05],
-  ["burstStrength", "버스트 세기", 0.1, 1.2, 0.05],
-  ["outline", "외곽선", 0.04, 0.22, 0.01],
-  ["fillLightness", "채움 밝기", 0, 1, 0.05],
+  ["size", "Size", 0.35, 1.1, 0.01],
+  ["offsetX", "Horizontal offset", -0.9, 0.9, 0.01],
+  ["height", "Height", 0.7, 1.45, 0.01],
+  ["tilt", "Tilt", -0.5, 0.5, 0.01],
+  ["popDuration", "Pop duration (s)", 0.2, 1.2, 0.05],
+  ["overshoot", "Pop overshoot", 0, 0.9, 0.05],
+  ["interval", "Burst interval (s)", 3, 40, 0.5],
+  ["jitter", "Interval jitter", 0, 0.5, 0.05],
+  ["burstDuration", "Burst duration (s)", 0.3, 1.2, 0.05],
+  ["burstStrength", "Burst strength", 0.1, 1.2, 0.05],
+  ["outline", "Outline", 0.04, 0.22, 0.01],
+  ["fillLightness", "Fill lightness", 0, 1, 0.05],
 ];
 const modeLabels: Record<AttentionConfig["mode"], string> = {
   bang: "!",
   interrobang: "!?",
   question: "?",
-  bubble: "말풍선",
-  kizuki: "알아챔 선",
-  ping: "핑",
+  bubble: "Bubble",
+  kizuki: "Notice lines",
+  ping: "Ping",
 };
-const backgrounds = { light: "밝게", dark: "어둡게", checker: "투명" };
-const sizes = { large: "2배", actual: "실제 크기" };
+const backgrounds = { light: "Light", dark: "Dark", checker: "Transparent" };
+const sizes = { large: "2×", actual: "Actual size" };
 const STORAGE = "pagent.attention.saved";
 
 let config: AttentionConfig = { ...(defaults as AttentionConfig) };
@@ -139,7 +139,7 @@ function renderRail(): void {
       const item = document.createElement("li");
       const button = Object.assign(document.createElement("button"), {
         type: "button",
-        textContent: `${modeLabels[saved.mode]} · ${saved.interval}초 · seed ${saved.seed}`,
+        textContent: `${modeLabels[saved.mode]} · ${saved.interval}s · seed ${saved.seed}`,
       });
       button.addEventListener("click", () => {
         config = { ...saved };
@@ -168,10 +168,10 @@ document.querySelector("#save")!.addEventListener("click", async () => {
       body: json,
     });
     if (!response.ok) throw new Error(String(response.status));
-    status.textContent = `저장됨: ${await response.text()}`;
+    status.textContent = `Saved to ${await response.text()}`;
   } catch {
     await navigator.clipboard?.writeText(json).catch(() => {});
-    status.textContent = "서버 없음: 클립보드에 복사했어요";
+    status.textContent = "No server: copied to the clipboard";
   }
 });
 

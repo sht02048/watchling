@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -12,8 +12,8 @@
       <header>
         <h1>pagent playground</h1>
         <p>
-          상태를 눌러 펫이 어떻게 바뀌는지 확인하세요. 숫자 키나 ←→ 키로도 바꿀
-          수 있어요.
+          Pick a state to see how the pet changes. Number keys and ←→ also
+          switch states.
         </p>
       </header>
       <section class="stage" data-background="light">
@@ -23,7 +23,7 @@
             <canvas id="actual"></canvas>
             <canvas class="front"></canvas>
           </div>
-          <figcaption>실제 크기</figcaption>
+          <figcaption>Actual size</figcaption>
         </figure>
         <figure>
           <div class="layers large">
@@ -31,23 +31,23 @@
             <canvas id="large"></canvas>
             <canvas class="front"></canvas>
           </div>
-          <figcaption>2배</figcaption>
+          <figcaption>2×</figcaption>
         </figure>
       </section>
       <div class="state-bar">
-        <nav id="states" aria-label="상태"></nav>
+        <nav id="states" aria-label="States"></nav>
         <label>
           <input id="cycle" type="checkbox" />
-          3초마다 자동 순환
+          Cycle every 3s
         </label>
       </div>
       <p id="description" aria-live="polite"></p>
       <div class="controls">
         <fieldset id="backgrounds">
-          <legend>배경</legend>
+          <legend>Background</legend>
         </fieldset>
         <fieldset id="companions">
-          <legend>백그라운드 에이전트</legend>
+          <legend>Background agents</legend>
         </fieldset>
       </div>
     </main>

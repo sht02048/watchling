@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -13,8 +13,8 @@
       <header>
         <h1>Attention lab</h1>
         <p>
-          asking 상태에서 머리 위에 띄우는 신호를 조정해요. 무대를 클릭하면 새
-          변형, 오른쪽 손잡이로 조정, Save로 저장해요.
+          Tune the cue shown above the pet while it is asking. Click the stage
+          for a new variation, tweak the knobs, and Save to keep it.
         </p>
       </header>
       <div class="lab-grid">
@@ -26,18 +26,18 @@
             </div>
           </div>
           <div class="state-bar">
-            <nav id="modes" aria-label="모드"></nav>
+            <nav id="modes" aria-label="Mode"></nav>
             <span class="seed"
               >asking <code id="elapsed"></code> · seed <code id="seed"></code
             ></span>
           </div>
           <div class="controls">
-            <button type="button" id="replay">처음부터 다시</button>
+            <button type="button" id="replay">Replay</button>
             <fieldset id="sizes">
-              <legend>크기</legend>
+              <legend>Size</legend>
             </fieldset>
             <fieldset id="backgrounds">
-              <legend>배경</legend>
+              <legend>Background</legend>
             </fieldset>
           </div>
         </section>
@@ -47,7 +47,7 @@
             <button type="button" id="save">Save</button>
             <span id="saved-to" aria-live="polite"></span>
           </div>
-          <h2>저장한 설정</h2>
+          <h2>Saved configs</h2>
           <ol id="rail"></ol>
         </aside>
       </div>

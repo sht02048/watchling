@@ -12,20 +12,20 @@ const MAX_ENDED = 256;
 const MAX_BACKGROUND = 32;
 const MAX_COMPANIONS = 3;
 const reasons: Record<SemanticState, string> = {
-  idle: "다음 요청을 기다리고 있어요.",
-  background: "백그라운드 서브에이전트가 작업하고 있어요.",
-  working: "작업하고 있어요.",
+  idle: "Waiting for the next prompt.",
+  background: "Background subagents are working.",
+  working: "Working on a turn.",
   unknown:
-    "놓친 신호가 있어 상태를 확인할 수 없어요. 다음 요청부터 다시 확인해요.",
-  asking: "승인이나 질문 응답이 필요해 보여요.",
+    "Some signals were missed, so this state is unknown until the next prompt.",
+  asking: "Probably waiting for your approval or answer.",
 };
 const observations: Record<SemanticState, string> = {
-  idle: "Claude Code가 다음 요청을 기다리고 있어요.",
-  background: "백그라운드 서브에이전트가 작업하고 있어요.",
-  working: "Claude Code가 작업하고 있어요.",
+  idle: "Claude Code is waiting for the next prompt.",
+  background: "Background subagents are working.",
+  working: "Claude Code is working.",
   unknown:
-    "놓친 신호가 있어 일부 세션의 상태를 확인할 수 없어요. 해당 세션에 다음 요청을 보내면 다시 확인해요.",
-  asking: "승인이나 질문 응답이 필요해 보여요.",
+    "Some signals were missed, so some sessions are unknown. A new prompt in that session checks it again.",
+  asking: "Probably waiting for your approval or answer.",
 };
 
 interface Session {
@@ -245,12 +245,12 @@ export class Observations {
       state,
       companions: Math.min(MAX_COMPANIONS, companions),
       observation: this.failed
-        ? "Claude Code 신호 수신을 시작하지 못해 상태를 확인할 수 없어요."
+        ? "Could not start receiving Claude Code signals, so the state is unknown."
         : ids.length > 0
           ? observations[state]
           : this.lossNotice
-            ? "놓친 신호가 있어 상태를 확인할 수 없어요. 다음 신호를 받으면 다시 확인해요."
-            : "아직 Claude Code 신호를 수신하지 않았어요.",
+            ? "Some signals were missed, so the state is unknown until the next signal."
+            : "No Claude Code signals received yet.",
       sessions: ids.map((id, index) => {
         let length = Math.min(8, id.length);
         while (

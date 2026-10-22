@@ -6,14 +6,14 @@ import {
 } from "../shared/ui-contract.ts";
 
 const descriptions: Record<SemanticState, string> = {
-  idle: "새 세션이 열렸거나 턴이 끝나 다음 요청을 기다리는 상태예요.",
-  background:
-    "메인 턴은 끝났지만 백그라운드 서브에이전트가 아직 작업 중이에요.",
-  working: "요청을 받아 작업 중이에요. 다른 상태에서 바뀔 때 한 번 튀어요.",
-  unknown: "놓친 신호가 있어 상태를 판단할 수 없어요.",
-  asking: "승인이나 질문 프롬프트가 떴을 가능성이 높아요.",
+  idle: "A new session, or a finished turn waiting for the next prompt.",
+  background: "The main turn ended but background subagents are still running.",
+  working:
+    "A turn is in progress. The pet hops once when it enters this state.",
+  unknown: "Signals were lost, so the state cannot be judged.",
+  asking: "A permission or question prompt is probably shown.",
 };
-const backgrounds = { light: "밝게", dark: "어둡게", checker: "투명" };
+const backgrounds = { light: "Light", dark: "Dark", checker: "Transparent" };
 
 const stage = document.querySelector<HTMLElement>(".stage")!;
 const nav = document.querySelector<HTMLElement>("#states")!;

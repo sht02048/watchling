@@ -18,7 +18,7 @@ function encodedBytes(value: Snapshot): number {
 function sizedSnapshot(bytes: number): Snapshot {
   const padding = bytes - encodedBytes(snapshot(""));
   return snapshot(
-    "한".repeat(Math.floor(padding / 3)) + "x".repeat(padding % 3),
+    "€".repeat(Math.floor(padding / 3)) + "x".repeat(padding % 3),
   );
 }
 
@@ -151,7 +151,7 @@ test("coalesces bursts globally, materializes latest state, and waits 50 ms per 
 
 test("accounts for every per-window mutation using only unpublished counts and bytes", () => {
   const { publisher, scheduler, state, records } = fixture();
-  state.snapshot = snapshot("private contents 한");
+  state.snapshot = snapshot("private contents €");
   const bytes = encodedBytes(state.snapshot);
   publisher.request();
   scheduler.advance(50);

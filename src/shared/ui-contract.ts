@@ -8,10 +8,10 @@ export const semanticStates = [
 export type SemanticState = (typeof semanticStates)[number];
 export const stateLabels: Record<SemanticState, string> = {
   idle: "Idle",
-  background: "백그라운드",
-  working: "작업 중",
-  unknown: "확인 불가",
-  asking: "확인 요청",
+  background: "Background",
+  working: "Working",
+  unknown: "Unknown",
+  asking: "Asking",
 };
 
 export interface SessionSummary {

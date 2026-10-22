@@ -34,7 +34,7 @@ function installedAppRunning() {
 
 async function quitInstalledApp() {
   if (process.env.HOME !== userInfo().homedir || !installedAppRunning()) return;
-  log("설치된 pagent를 종료하고 개발 버전을 띄워요");
+  log("Quitting the installed pagent to run the dev build");
   execFileSync("osascript", ["-e", 'quit app "pagent"']);
   for (let attempt = 0; attempt < 50 && installedAppRunning(); attempt++)
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -48,7 +48,7 @@ function launch() {
   const current = app;
   current.on("exit", (code) => {
     if (current !== app || restarting) return;
-    log(`앱이 종료됐어요 (code ${code}). 개발 모드를 끝내요`);
+    log(`App exited (code ${code}); stopping dev mode`);
     process.exit(0);
   });
 }
@@ -57,7 +57,7 @@ function restart() {
   clearTimeout(timer);
   timer = setTimeout(() => {
     if (!app) return launch();
-    log("main이 바뀌어 앱을 다시 띄워요");
+    log("Main changed; restarting the app");
     restarting = true;
     app.once("exit", () => {
       restarting = false;
@@ -109,7 +109,7 @@ watch("src/renderer", { recursive: true }, (_, file) => {
 
 await quitInstalledApp();
 launch();
-log("변경을 지켜보고 있어요. renderer는 새로고침, main은 재시작해요");
+log("Watching for changes: renderer edits reload, main edits restart");
 
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, async () => {

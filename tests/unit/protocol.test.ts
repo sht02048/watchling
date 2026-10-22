@@ -9,7 +9,7 @@ import {
 const event = {
   eventName: "PermissionRequest",
   sessionId: "session-1",
-  project: "프로젝트",
+  project: "café-☃",
   toolName: "Bash",
 };
 const frame = {

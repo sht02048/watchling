@@ -309,7 +309,7 @@ test("operation dictionary and label lengths are bounded and invalid text is not
     trace.begin("extra-stage")();
     trace.begin("/provider/private/path")();
     trace.begin("x".repeat(65))();
-    trace.begin("상태")();
+    trace.begin("état")();
     trace.begin("stage0")();
     const report = trace.report();
     assert.equal(report.operations.length, 64);

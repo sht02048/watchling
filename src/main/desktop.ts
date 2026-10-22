@@ -255,7 +255,7 @@ async function start(options: DesktopOptions): Promise<void> {
     minimizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    title: "pagent 세션",
+    title: "pagent sessions",
     backgroundColor: "#faf8f3",
     webPreferences,
   });
@@ -320,10 +320,10 @@ async function start(options: DesktopOptions): Promise<void> {
   updateTray();
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "펫 표시", click: showPet },
-      { label: "펫 숨기기", click: hidePet },
+      { label: "Show pet", click: showPet },
+      { label: "Hide pet", click: hidePet },
       { type: "separator" },
-      { label: "종료", click: () => app.quit() },
+      { label: "Quit", click: () => app.quit() },
     ]),
   );
   publisher = createSnapshotPublisher({

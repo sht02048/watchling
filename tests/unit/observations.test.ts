@@ -29,7 +29,7 @@ test("aggregate shows the highest session state in priority order", () => {
   assert.equal(observations.snapshot().state, "idle");
   assert.equal(
     observations.snapshot().observation,
-    "아직 Claude Code 신호를 수신하지 않았어요.",
+    "No Claude Code signals received yet.",
   );
   feed(observations, event("SessionStart", { sessionId: "a" }));
   assert.equal(observations.snapshot().state, "idle");
@@ -51,7 +51,7 @@ test("aggregate shows the highest session state in priority order", () => {
   assert.equal(observations.snapshot().state, "asking");
   assert.equal(
     observations.snapshot().observation,
-    "승인이나 질문 응답이 필요해 보여요.",
+    "Probably waiting for your approval or answer.",
   );
   assert.deepEqual(
     observations.snapshot().sessions.map((row) => [row.id, row.state]),
@@ -80,7 +80,7 @@ test("sessions in the same project are independent and short IDs stay distinct",
       ["sameprefix-B", "project", "working"],
     ],
   );
-  assert.equal(sessions[0]!.reason, "다음 요청을 기다리고 있어요.");
+  assert.equal(sessions[0]!.reason, "Waiting for the next prompt.");
 });
 
 test("two asks are cleared independently", () => {
@@ -293,7 +293,7 @@ test("Stop clears asks and ends the turn", () => {
   assert.equal(stateOf(observations), "idle");
   assert.equal(
     observations.snapshot().observation,
-    "Claude Code가 다음 요청을 기다리고 있어요.",
+    "Claude Code is waiting for the next prompt.",
   );
 });
 
@@ -324,7 +324,7 @@ test("integrity loss with no sessions shows unknown until the next event", () =>
   const observations = new Observations();
   observations.loseIntegrity();
   assert.equal(observations.snapshot().state, "unknown");
-  assert.match(observations.snapshot().observation, /놓친 신호/);
+  assert.match(observations.snapshot().observation, /signals were missed/);
   feed(observations, event("SessionStart"));
   assert.equal(observations.snapshot().state, "idle");
 });

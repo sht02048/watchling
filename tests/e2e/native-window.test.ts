@@ -195,7 +195,7 @@ test("real macOS input passes through empty pixels without stealing focus, inclu
           pet.webContents.send("pagent:snapshot-changed", {
             state: i % 2 ? "working" : "unknown",
             sessions: [],
-            observation: "시험 입력",
+            observation: "test input",
             companions: 0,
           });
       });

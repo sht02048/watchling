@@ -292,8 +292,8 @@ final class ProjectionTests: XCTestCase {
     }
 
     func testNonASCIIProjectUsesUTF8ByteLimitAndDropsParentPath() throws {
-        let event = try XCTUnwrap(project(["cwd": "/private/fixture/프로젝트-雪/"]))
-        XCTAssertEqual(event.project, "프로젝트-雪")
+        let event = try XCTUnwrap(project(["cwd": "/private/fixture/café-☃/"]))
+        XCTAssertEqual(event.project, "café-☃")
         let boundary = String(repeating: "é", count: 128)
         XCTAssertEqual(try project(["cwd": "/private/\(boundary)"])?.project, boundary)
         XCTAssertNil(try project(["cwd": "/private/\(boundary)x"]))

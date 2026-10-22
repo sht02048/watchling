@@ -38,7 +38,7 @@ const binary = join(
 const raw = {
   hook_event_name: "PreToolUse",
   session_id: "session-1",
-  cwd: "/private/프로젝트",
+  cwd: "/private/café-☃",
   tool_name: "AskUserQuestion",
   tool_use_id: "toolu_1",
   prompt_id: "prompt-1",
@@ -224,7 +224,7 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
       {
         eventName: "PreToolUse",
         sessionId: "session-1",
-        project: "프로젝트",
+        project: "café-☃",
         toolName: "AskUserQuestion",
         toolUseId: "toolu_1",
         promptId: "prompt-1",
@@ -426,7 +426,7 @@ test("helper events drive session states through the collector", async () => {
     },
     onLoss: () => assert.fail("Valid emitter delivery lost"),
   });
-  const base = { session_id: "pipeline-a", cwd: "/private/파이프라인" };
+  const base = { session_id: "pipeline-a", cwd: "/private/pipeline" };
   const input = { command: "printf pagent-pipeline-secret-7d1e" };
   const steps: [Record<string, unknown>, string | undefined, string][] = [
     [{ ...base, hook_event_name: "SessionStart" }, undefined, "idle"],
@@ -467,7 +467,7 @@ test("helper events drive session states through the collector", async () => {
     [
       {
         session_id: "pipeline-b",
-        cwd: "/private/파이프라인",
+        cwd: "/private/pipeline",
         hook_event_name: "PermissionRequest",
         tool_name: "Bash",
         tool_input: input,
