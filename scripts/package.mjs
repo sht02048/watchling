@@ -81,6 +81,7 @@ try {
       : null,
     mac: {
       category: "public.app-category.developer-tools",
+      icon: resolve("resources/icon.icns"),
       target: fused ? ["dmg", "dir"] : ["dir"],
       identity: "-",
       hardenedRuntime: false,
