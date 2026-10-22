@@ -98,6 +98,20 @@ const steps = [
     sessions: 1,
   },
   {
+    name: "background agent launched",
+    event: {
+      ...session("drive-a"),
+      hook_event_name: "PostToolUse",
+      tool_name: "Agent",
+      tool_use_id: "toolu_drive_agent",
+      tool_input: { prompt: "pagent drive" },
+      tool_response: { agentId: "agent-drive", status: "async_launched" },
+    },
+    expect: "working",
+    sessions: 1,
+    companions: 1,
+  },
+  {
     name: "non-interactive permission in another session",
     event: {
       ...session("drive-b"),
@@ -116,10 +130,22 @@ const steps = [
     sessions: 2,
   },
   {
-    name: "all turns ended",
+    name: "all turns ended while an agent runs",
     event: { ...session("drive-b"), hook_event_name: "Stop" },
+    expect: "background",
+    sessions: 2,
+    companions: 1,
+  },
+  {
+    name: "background agent finished",
+    event: {
+      ...session("drive-a"),
+      hook_event_name: "SubagentStop",
+      agent_id: "agent-drive",
+    },
     expect: "idle",
     sessions: 2,
+    companions: 0,
   },
   {
     name: "sessions ended",
@@ -198,7 +224,8 @@ try {
       actual = await snapshot();
       if (
         actual.state === step.expect &&
-        actual.sessions.length === step.sessions
+        actual.sessions.length === step.sessions &&
+        (step.companions === undefined || actual.companions === step.companions)
       )
         break;
       await new Promise((r) => setTimeout(r, 100));
@@ -212,12 +239,15 @@ try {
     const ok =
       actual.state === step.expect &&
       actual.sessions.length === step.sessions &&
+      (step.companions === undefined ||
+        actual.companions === step.companions) &&
       runs.every((run) => run.code === 0 && !run.stdout && !run.stderr);
     failed ||= !ok;
     report.steps.push({
       name: step.name,
       expect: step.expect,
       actual: actual.state,
+      companions: actual.companions,
       sessions: actual.sessions.map(({ id, state }) => ({ id, state })),
       helperExit: runs.map((run) => run.code),
       helperOutput: runs.some((run) => run.stdout || run.stderr),

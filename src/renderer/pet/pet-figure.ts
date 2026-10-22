@@ -3,8 +3,9 @@
  * No session/provider/DOM-panel knowledge belongs in this module.
  */
 import type { SemanticState } from "../../shared/ui-contract.ts";
-
-type OKLab = [number, number, number];
+import { rgb, type OKLab } from "./color.ts";
+import { drawCompanions, type CompanionConfig } from "./companions.ts";
+import companionConfig from "./companions.json" with { type: "json" };
 
 interface Pose {
   amp: number;
@@ -75,6 +76,18 @@ const IDLE: Pose = {
 };
 const POSES: Record<SemanticState, Pose> = {
   idle: IDLE,
+  background: {
+    ...IDLE,
+    amp: 0.035,
+    speed: 0.9,
+    eye: 0.8,
+    lookY: 0.15,
+    breathe: 0.5,
+    pulse: 0.2,
+    field: 0.75,
+    wave: 0.3,
+    rot: 0.18,
+  },
   working: {
     ...IDLE,
     amp: 0.042,
@@ -124,8 +137,9 @@ const lch = (l: number, c: number, h: number): OKLab => [
   c * Math.cos((h * Math.PI) / 180),
   c * Math.sin((h * Math.PI) / 180),
 ];
-const PALETTE: Record<SemanticState, readonly [OKLab, OKLab]> = {
+export const PALETTE: Record<SemanticState, readonly [OKLab, OKLab]> = {
   idle: [lch(0.88, 0.07, 60), lch(0.74, 0.14, 25)],
+  background: [lch(0.88, 0.07, 215), lch(0.7, 0.12, 255)],
   working: [lch(0.9, 0.11, 90), lch(0.76, 0.16, 55)],
   asking: [lch(0.86, 0.11, 310), lch(0.66, 0.17, 300)],
   unknown: [lch(0.87, 0.025, 295), lch(0.72, 0.045, 285)],
@@ -155,22 +169,6 @@ function mulberry32(seed: number): () => number {
 const random = mulberry32(SHAPE.seed);
 const SPIKES = Array.from({ length: 64 }, () => random() * 2 - 1);
 const ROT0 = random() * TAU;
-
-function rgb([l, a, b]: OKLab, alpha = 1): string {
-  const ll = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const mm = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const ss = (l - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  const channels = [
-    4.0767416621 * ll - 3.3077115913 * mm + 0.2309699292 * ss,
-    -1.2684380046 * ll + 2.6097574011 * mm - 0.3413193965 * ss,
-    -0.0041960863 * ll - 0.7034186147 * mm + 1.707614701 * ss,
-  ].map((x) => {
-    const v =
-      x <= 0.0031308 ? 12.92 * x : 1.055 * Math.max(x, 0) ** (1 / 2.4) - 0.055;
-    return Math.round(Math.min(1, Math.max(0, v)) * 255);
-  });
-  return `rgba(${channels.join(",")},${alpha})`;
-}
 
 function toScreen(f: Figure, u: number, v: number): [number, number] {
   const x = u * f.sx,
@@ -319,8 +317,12 @@ function pixelRatio(): number {
   return Math.min(window.devicePixelRatio || 1, 2);
 }
 
-export function createPet(canvas: HTMLCanvasElement): {
+export function createPet(
+  canvas: HTMLCanvasElement,
+  layers?: { back: HTMLCanvasElement; front: HTMLCanvasElement },
+): {
   setState(state: SemanticState): void;
+  setCompanions(count: number): void;
   hitTest(x: number, y: number): boolean;
   destroy(): void;
 } {
@@ -368,6 +370,11 @@ export function createPet(canvas: HTMLCanvasElement): {
   let ratio = 1;
   let body: Path2D | null = null;
   let destroyed = false;
+  let companions = 0;
+  const layerContexts = layers && {
+    back: layers.back.getContext("2d")!,
+    front: layers.front.getContext("2d")!,
+  };
 
   function render(): void {
     for (const key of POSE_KEYS) figure[key] = params[key].v;
@@ -386,6 +393,15 @@ export function createPet(canvas: HTMLCanvasElement): {
       figure.c2[channel] = c2[channel].v;
     }
     body = draw(ctx, figure, width, height, ratio);
+    if (layerContexts)
+      drawCompanions(
+        layerContexts.back,
+        layerContexts.front,
+        companionConfig as CompanionConfig,
+        companions,
+        figure.t,
+        { width, height, ratio, palette: [figure.c1, figure.c2] },
+      );
   }
 
   function resize(): void {
@@ -396,8 +412,11 @@ export function createPet(canvas: HTMLCanvasElement): {
     ratio = pixelRatio();
     const pixelWidth = Math.round(width * ratio);
     const pixelHeight = Math.round(height * ratio);
-    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
-    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    for (const target of [canvas, layers?.back, layers?.front]) {
+      if (!target) continue;
+      if (target.width !== pixelWidth) target.width = pixelWidth;
+      if (target.height !== pixelHeight) target.height = pixelHeight;
+    }
     render();
   }
 
@@ -445,6 +464,9 @@ export function createPet(canvas: HTMLCanvasElement): {
         c2[channel].target = PALETTE[state][1][channel];
       }
       render();
+    },
+    setCompanions(count: number): void {
+      companions = count;
     },
     hitTest(x: number, y: number): boolean {
       if (

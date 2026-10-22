@@ -8,7 +8,7 @@ import {
 import type { Snapshot } from "../../src/shared/ui-contract.ts";
 
 function snapshot(observation: string): Snapshot {
-  return { state: "idle", sessions: [], observation };
+  return { state: "idle", sessions: [], observation, companions: 0 };
 }
 
 function encodedBytes(value: Snapshot): number {

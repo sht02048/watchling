@@ -1,13 +1,16 @@
 import { createPet } from "./pet-figure.ts";
 import { stateLabels, type Snapshot } from "../../shared/ui-contract.ts";
 
-const canvas = document.querySelector("canvas");
-if (!canvas) throw new Error("Pet canvas missing");
-const pet = createPet(canvas);
+const canvas = document.querySelector<HTMLCanvasElement>("#pet");
+const back = document.querySelector<HTMLCanvasElement>("#back");
+const front = document.querySelector<HTMLCanvasElement>("#front");
+if (!canvas || !back || !front) throw new Error("Pet canvas missing");
+const pet = createPet(canvas, { back, front });
 let hit = false;
 let pointer: { id: number; x: number; y: number; moved: boolean } | undefined;
 function render(snapshot: Snapshot): void {
   pet.setState(snapshot.state);
+  pet.setCompanions(snapshot.companions);
   canvas!.setAttribute(
     "aria-label",
     `pagent ${stateLabels[snapshot.state]}. 클릭하여 세션 확인`,

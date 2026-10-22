@@ -1,0 +1,21 @@
+{
+  "seed": 20261022,
+  "mode": "head",
+  "count": 3,
+  "size": 0.2,
+  "radiusX": 1.25,
+  "radiusY": 0.42,
+  "speed": 0.9,
+  "spread": 1,
+  "bob": 0.08,
+  "bobSpeed": 3.2,
+  "wobble": 0.5,
+  "spikes": 6,
+  "spikeLength": 0.12,
+  "lightness": 0.04,
+  "depth": 0.6,
+  "eye": 1.3,
+  "eyeY": 0.02,
+  "blush": 0.35,
+  "surface": 0.9
+}

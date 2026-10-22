@@ -86,6 +86,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
       await page.emulateMedia({ reducedMotion: motion });
       for (const state of [
         "idle",
+        "background",
         "working",
         "unknown",
         "asking",
@@ -98,19 +99,20 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
             state,
             sessions: [],
             observation: "시험 입력",
+            companions: 0,
           });
         }, state);
-        await expect(page.locator("canvas")).toHaveAttribute(
+        await expect(page.locator("#pet")).toHaveAttribute(
           "aria-label",
           new RegExp(stateLabels[state]),
         );
         const before = await page
-          .locator("canvas")
+          .locator("#pet")
           .evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL());
         await expect
           .poll(() =>
             page
-              .locator("canvas")
+              .locator("#pet")
               .evaluate((canvas) => (canvas as HTMLCanvasElement).toDataURL()),
           )
           .not.toBe(before);

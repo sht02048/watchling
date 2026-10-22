@@ -9,8 +9,11 @@ const MAX_SESSIONS = 128;
 const MAX_ASKS = 32;
 const MAX_PENDING = 64;
 const MAX_ENDED = 256;
+const MAX_BACKGROUND = 32;
+const MAX_COMPANIONS = 3;
 const reasons: Record<SemanticState, string> = {
   idle: "다음 요청을 기다리고 있어요.",
+  background: "백그라운드 서브에이전트가 작업하고 있어요.",
   working: "작업하고 있어요.",
   unknown:
     "놓친 신호가 있어 상태를 확인할 수 없어요. 다음 요청부터 다시 확인해요.",
@@ -18,6 +21,7 @@ const reasons: Record<SemanticState, string> = {
 };
 const observations: Record<SemanticState, string> = {
   idle: "Claude Code가 다음 요청을 기다리고 있어요.",
+  background: "백그라운드 서브에이전트가 작업하고 있어요.",
   working: "Claude Code가 작업하고 있어요.",
   unknown:
     "놓친 신호가 있어 일부 세션의 상태를 확인할 수 없어요. 해당 세션에 다음 요청을 보내면 다시 확인해요.",
@@ -32,6 +36,7 @@ interface Session {
   fingerprintAsks: Map<string, number>;
   unkeyedAsk: boolean;
   pending: Map<string, string>;
+  background: Set<string>;
 }
 
 function askCount(session: Session): number {
@@ -73,7 +78,10 @@ function display(session: Session): SemanticState {
     session.unkeyedAsk
   )
     return "asking";
-  return session.unknown ? "unknown" : session.base;
+  if (session.unknown) return "unknown";
+  if (session.base === "idle" && session.background.size > 0)
+    return "background";
+  return session.base;
 }
 
 export class Observations {
@@ -113,10 +121,12 @@ export class Observations {
         fingerprintAsks: new Map(),
         unkeyedAsk: false,
         pending: new Map(),
+        background: new Set(),
       };
       this.sessions.set(event.sessionId, session);
     }
     session.project = event.project;
+    if (event.backgroundTasks?.length === 0) session.background.clear();
     const activity = (): void => {
       if (!(event.agentId && session.base === "idle")) session.base = "working";
     };
@@ -181,7 +191,14 @@ export class Observations {
           if (count !== undefined && count > 1) session.unknown = true;
         }
         session.unkeyedAsk = false;
+        if (event.childStatus === "async_launched" && event.childAgentId) {
+          if (session.background.size >= MAX_BACKGROUND) session.unknown = true;
+          else session.background.add(event.childAgentId);
+        }
         activity();
+        break;
+      case "SubagentStop":
+        if (event.agentId) session.background.delete(event.agentId);
         break;
       case "PostToolBatch":
         for (const call of event.toolCalls ?? []) {
@@ -221,8 +238,12 @@ export class Observations {
         priority.indexOf(next) > priority.indexOf(highest) ? next : highest,
       "idle",
     );
+    let companions = 0;
+    for (const session of this.sessions.values())
+      companions += session.background.size;
     return {
       state,
+      companions: Math.min(MAX_COMPANIONS, companions),
       observation: this.failed
         ? "Claude Code 신호 수신을 시작하지 못해 상태를 확인할 수 없어요."
         : ids.length > 0

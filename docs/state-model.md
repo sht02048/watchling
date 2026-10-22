@@ -8,20 +8,25 @@ Comparable projects reach the same limit. Those that know exact wait timing do s
 
 ## States
 
-Displayed priority: `asking > unknown > working > idle`. The pet shows the highest state across sessions.
+Displayed priority: `asking > unknown > working > background > idle`. The pet shows the highest state across sessions.
 
-| State     | Meaning                                               | Enter                                                                                                                                                                              | Leave                                          |
-| --------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `asking`  | A permission or question prompt is likely shown       | `PermissionRequest` or `Notification` (`permission_prompt`) not marked non-interactive; `PreToolUse` for `AskUserQuestion`                                                         | See [Clearing an ask](#clearing-an-ask)        |
-| `working` | A turn is in progress                                 | `UserPromptSubmit`; main-session `PreToolUse`, `PermissionRequest` and post-tool events                                                                                            | `Stop`; `StopFailure`; interrupt               |
-| `unknown` | Evidence for this session is broken                   | Known transport loss or overflow; a session cap; more than 32 asks; a post-tool fingerprint that matches several fingerprint-only asks; a session first seen mid-turn after a loss | The next `UserPromptSubmit` for that session   |
-| `idle`    | Claude awaits the next prompt, or nothing is observed | A new session; main-session `Stop` / `StopFailure`; `PostToolUseFailure` with `is_interrupt`; no sessions                                                                          | `UserPromptSubmit`; main-session tool activity |
+| State        | Meaning                                                  | Enter                                                                                                                                                                              | Leave                                                                                                                                                             |
+| ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `asking`     | A permission or question prompt is likely shown          | `PermissionRequest` or `Notification` (`permission_prompt`) not marked non-interactive; `PreToolUse` for `AskUserQuestion`                                                         | See [Clearing an ask](#clearing-an-ask)                                                                                                                           |
+| `working`    | A turn is in progress                                    | `UserPromptSubmit`; main-session `PreToolUse`, `PermissionRequest` and post-tool events                                                                                            | `Stop`; `StopFailure`; interrupt                                                                                                                                  |
+| `unknown`    | Evidence for this session is broken                      | Known transport loss or overflow; a session cap; more than 32 asks; a post-tool fingerprint that matches several fingerprint-only asks; a session first seen mid-turn after a loss | The next `UserPromptSubmit` for that session                                                                                                                      |
+| `background` | The main turn ended while background subagents still run | `PostToolUse` for `Agent` reporting `async_launched`, once the main turn is `idle`                                                                                                 | `SubagentStop` for each launched agent; an empty `background_tasks` list on `Stop` / `SubagentStop`; `UserPromptSubmit` shows `working` while agents keep running |
+| `idle`       | Claude awaits the next prompt, or nothing is observed    | A new session; main-session `Stop` / `StopFailure`; `PostToolUseFailure` with `is_interrupt`; no sessions                                                                          | `UserPromptSubmit`; main-session tool activity                                                                                                                    |
 
 Subagent events (`agent_id` present) never move an `idle` session to `working`; background agents can keep running after the main `Stop`. Their asks still count.
 
 Events that arrive after `SessionEnd` are ignored unless they start a new turn, so late deliveries cannot revive an ended session.
 
 No state changes on elapsed time alone. If the receiver fails to start, or a loss occurs while no session is known, the pet shows `unknown` rather than `idle`.
+
+Each running background subagent also appears as a small companion sitting on the pet's head, up to three, whatever the displayed state; they take the pet's current colors. Their look and motion come from `src/renderer/pet/companions.json`, tuned in the companions lab (`npm run playground`, then `/companions.html`).
+
+Background shell tasks are not counted, so a long-running dev server does not keep the pet out of `idle`. The launch `agentId` is assumed to match the `agent_id` on that subagent's `SubagentStop`; this has not been confirmed against a live session.
 
 ## Signals added to the emitter
 

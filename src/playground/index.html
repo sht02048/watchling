@@ -18,11 +18,19 @@
       </header>
       <section class="stage" data-background="light">
         <figure>
-          <canvas id="actual" class="actual"></canvas>
+          <div class="layers actual">
+            <canvas class="back"></canvas>
+            <canvas id="actual"></canvas>
+            <canvas class="front"></canvas>
+          </div>
           <figcaption>실제 크기</figcaption>
         </figure>
         <figure>
-          <canvas id="large" class="large"></canvas>
+          <div class="layers large">
+            <canvas class="back"></canvas>
+            <canvas id="large"></canvas>
+            <canvas class="front"></canvas>
+          </div>
           <figcaption>2배</figcaption>
         </figure>
       </section>
@@ -37,6 +45,9 @@
       <div class="controls">
         <fieldset id="backgrounds">
           <legend>배경</legend>
+        </fieldset>
+        <fieldset id="companions">
+          <legend>백그라운드 에이전트</legend>
         </fieldset>
       </div>
     </main>

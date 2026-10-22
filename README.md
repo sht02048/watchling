@@ -29,7 +29,7 @@ If hooks were installed from another copy of the app, launching pagent from `/Ap
 
 ## States
 
-The pet shows the most urgent state across sessions: `asking`, `unknown`, `working`, `idle`. See [docs/state-model.md](docs/state-model.md) for what each one means and when it changes, and [docs/claude-coverage.md](docs/claude-coverage.md) for the hook evidence behind it.
+The pet shows the most urgent state across sessions: `asking`, `unknown`, `working`, `background`, `idle`. See [docs/state-model.md](docs/state-model.md) for what each one means and when it changes, and [docs/claude-coverage.md](docs/claude-coverage.md) for the hook evidence behind it.
 
 ## Development
 

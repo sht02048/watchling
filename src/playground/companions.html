@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>pagent companions lab</title>
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="companions.css" />
+    <script defer src="companions.js"></script>
+  </head>
+  <body>
+    <main class="lab">
+      <header>
+        <h1>Companions lab</h1>
+        <p>
+          백그라운드 서브에이전트 표현을 조정해요. 무대를 클릭하면 새 변형,
+          오른쪽 손잡이로 조정, Save로 저장해요.
+        </p>
+      </header>
+      <div class="lab-grid">
+        <section>
+          <div class="stage lab-stage" data-background="light" id="stage">
+            <div class="layers" id="layers">
+              <canvas id="back"></canvas>
+              <canvas id="pet"></canvas>
+              <canvas id="front"></canvas>
+            </div>
+          </div>
+          <div class="state-bar">
+            <nav id="modes" aria-label="모드"></nav>
+            <span class="seed">seed <code id="seed"></code></span>
+          </div>
+          <div class="controls">
+            <fieldset id="sizes">
+              <legend>크기</legend>
+            </fieldset>
+            <fieldset id="backgrounds">
+              <legend>배경</legend>
+            </fieldset>
+          </div>
+        </section>
+        <aside>
+          <div id="knobs"></div>
+          <div class="save-row">
+            <button type="button" id="save">Save</button>
+            <span id="saved-to" aria-live="polite"></span>
+          </div>
+          <h2>저장한 설정</h2>
+          <ol id="rail"></ol>
+        </aside>
+      </div>
+    </main>
+  </body>
+</html>

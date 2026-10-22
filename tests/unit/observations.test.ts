@@ -634,3 +634,115 @@ test("ended-session memory is bounded and forgets the oldest first", () => {
   );
   assert.equal(stateOf(observations, "ended-0"), "working");
 });
+
+test("background subagents keep a finished turn in the background state", () => {
+  const observations = new Observations();
+  const launch = (agent: string) =>
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: `t-${agent}`,
+      childAgentId: agent,
+      childStatus: "async_launched",
+    });
+  feed(observations, event("UserPromptSubmit"), launch("a1"), launch("a2"));
+  assert.equal(stateOf(observations), "working");
+  feed(observations, event("Stop"));
+  assert.equal(stateOf(observations), "background");
+  assert.equal(observations.snapshot().state, "background");
+  feed(
+    observations,
+    event("PreToolUse", { agentId: "a1", toolName: "Bash", toolUseId: "b1" }),
+  );
+  assert.equal(stateOf(observations), "background");
+  feed(observations, event("SubagentStop", { agentId: "a1" }));
+  assert.equal(stateOf(observations), "background");
+  feed(observations, event("SubagentStop", { agentId: "a2" }));
+  assert.equal(stateOf(observations), "idle");
+});
+
+test("foreground subagents and other states outrank background", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: "t1",
+      childAgentId: "fg",
+      childStatus: "completed",
+    }),
+    event("Stop"),
+  );
+  assert.equal(stateOf(observations), "idle");
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: "t2",
+      childAgentId: "bg",
+      childStatus: "async_launched",
+    }),
+  );
+  assert.equal(stateOf(observations), "working");
+  feed(
+    observations,
+    event("Stop"),
+    event("PermissionRequest", {
+      agentId: "bg",
+      toolName: "Bash",
+      toolUseId: "b1",
+    }),
+  );
+  assert.equal(stateOf(observations), "asking");
+});
+
+test("an empty background task list clears background agents", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: "t1",
+      childAgentId: "bg",
+      childStatus: "async_launched",
+    }),
+    event("Stop", {
+      backgroundTasks: [{ id: "x", type: "agent", status: "running" }],
+    }),
+  );
+  assert.equal(stateOf(observations), "background");
+  feed(observations, event("Stop", { backgroundTasks: [] }));
+  assert.equal(stateOf(observations), "idle");
+});
+
+test("companions count background agents across sessions up to three", () => {
+  const observations = new Observations();
+  const launch = (sessionId: string, agent: string) =>
+    event("PostToolUse", {
+      sessionId,
+      toolName: "Agent",
+      toolUseId: `t-${agent}`,
+      childAgentId: agent,
+      childStatus: "async_launched",
+    });
+  assert.equal(observations.snapshot().companions, 0);
+  feed(
+    observations,
+    event("UserPromptSubmit", { sessionId: "a" }),
+    launch("a", "a1"),
+    launch("a", "a2"),
+    event("UserPromptSubmit", { sessionId: "b" }),
+    launch("b", "b1"),
+    launch("b", "b2"),
+  );
+  assert.equal(observations.snapshot().state, "working");
+  assert.equal(observations.snapshot().companions, 3);
+  feed(
+    observations,
+    event("SubagentStop", { sessionId: "a", agentId: "a1" }),
+    event("SubagentStop", { sessionId: "b", agentId: "b1" }),
+  );
+  assert.equal(observations.snapshot().companions, 2);
+});

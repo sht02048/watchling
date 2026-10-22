@@ -7,6 +7,8 @@ import {
 
 const descriptions: Record<SemanticState, string> = {
   idle: "새 세션이 열렸거나 턴이 끝나 다음 요청을 기다리는 상태예요.",
+  background:
+    "메인 턴은 끝났지만 백그라운드 서브에이전트가 아직 작업 중이에요.",
   working: "요청을 받아 작업 중이에요. 다른 상태에서 바뀔 때 한 번 튀어요.",
   unknown: "놓친 신호가 있어 상태를 판단할 수 없어요.",
   asking: "승인이나 질문 프롬프트가 떴을 가능성이 높아요.",
@@ -18,9 +20,14 @@ const nav = document.querySelector<HTMLElement>("#states")!;
 const description = document.querySelector<HTMLElement>("#description")!;
 const backgroundSet = document.querySelector<HTMLElement>("#backgrounds")!;
 const cycle = document.querySelector<HTMLInputElement>("#cycle")!;
-const pets = ["#actual", "#large"].map((selector) =>
-  createPet(document.querySelector<HTMLCanvasElement>(selector)!),
-);
+const pets = ["#actual", "#large"].map((selector) => {
+  const canvas = document.querySelector<HTMLCanvasElement>(selector)!;
+  const layers = canvas.parentElement!;
+  return createPet(canvas, {
+    back: layers.querySelector<HTMLCanvasElement>(".back")!,
+    front: layers.querySelector<HTMLCanvasElement>(".front")!,
+  });
+});
 const order = [...semanticStates].reverse();
 let current: SemanticState = "unknown";
 let timer: ReturnType<typeof setInterval> | undefined;
@@ -66,6 +73,22 @@ for (const [value, label] of Object.entries(backgrounds)) {
   option.append(input, ` ${label}`);
   backgroundSet.append(option);
 }
+
+for (const count of [0, 1, 2, 3]) {
+  const option = document.createElement("label");
+  const input = Object.assign(document.createElement("input"), {
+    type: "radio",
+    name: "companions",
+    value: String(count),
+    checked: count === 2,
+  });
+  input.addEventListener("change", () => {
+    for (const pet of pets) pet.setCompanions(count);
+  });
+  option.append(input, ` ${count}`);
+  document.querySelector("#companions")!.append(option);
+}
+for (const pet of pets) pet.setCompanions(2);
 
 cycle.addEventListener("change", () => {
   if (timer) clearInterval(timer);

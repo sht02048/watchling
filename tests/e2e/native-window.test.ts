@@ -196,6 +196,7 @@ test("real macOS input passes through empty pixels without stealing focus, inclu
             state: i % 2 ? "working" : "unknown",
             sessions: [],
             observation: "시험 입력",
+            companions: 0,
           });
       });
       expect((await status()).frontmostPid).toBe(initial.pid);

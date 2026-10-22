@@ -1,7 +1,14 @@
-export const semanticStates = ["idle", "working", "unknown", "asking"] as const;
+export const semanticStates = [
+  "idle",
+  "background",
+  "working",
+  "unknown",
+  "asking",
+] as const;
 export type SemanticState = (typeof semanticStates)[number];
 export const stateLabels: Record<SemanticState, string> = {
   idle: "Idle",
+  background: "백그라운드",
   working: "작업 중",
   unknown: "확인 불가",
   asking: "확인 요청",
@@ -18,6 +25,7 @@ export interface Snapshot {
   state: SemanticState;
   sessions: readonly SessionSummary[];
   observation: string;
+  companions: number;
 }
 
 export interface Point {
