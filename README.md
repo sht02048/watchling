@@ -1,55 +1,122 @@
-# Watchling
+<p align="center">
+  <img src="resources/icon.svg" width="128" height="128" alt="Watchling icon">
+</p>
 
-Watchling is a small desktop pet for macOS that shows what your Claude Code sessions are doing. It is read-only: it listens to Claude Code hooks and never answers prompts or changes a session.
+<h1 align="center">Watchling</h1>
 
-Apple silicon only.
+<p align="center"><b>A quiet desktop pet that watches your Claude Code sessions.</b></p>
+
+<p align="center">
+  <a href="https://github.com/sht02048/watchling/releases/latest"><img src="https://img.shields.io/badge/download-latest-brightgreen?style=flat-square" alt="Download"></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B%20Apple%20silicon-blue?style=flat-square" alt="macOS 13+ on Apple silicon">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square" alt="MIT License"></a>
+</p>
+
+<!-- Hero GIF: Peep cycling through idle, working, background and asking -->
+
+Start a long task, switch to something else, and look up when Peep turns purple. Peep busies itself while Claude works, carries little companions when background agents run, and pops a speech bubble when a session is waiting for your approval or answer. Watchling only watches: it never answers prompts or approves tools for you.
+
+## Features
+
+- **Live session state** — Peep shows the most urgent state across all your Claude Code sessions
+- **Attention bubble** — a purple speech bubble when a session needs approval or an answer, with no sounds or notifications
+- **Background companions** — up to three small companions ride on Peep's head while background agents run
+- **Session list** — click Peep to see every session grouped by project, with what it's doing and for how long
+- **Auto-connect** — hooks install on first launch and can be turned off from the menu bar
+- **Local and read-only** — nothing leaves your Mac, and Watchling never changes a session
 
 ## Install
 
-1. Build the DMG with `pnpm build:local-app`, or use one you were given. It is written to `build/release/Watchling-<version>-arm64.dmg`.
-2. Open the DMG and drag `Watchling.app` to `/Applications`.
-3. Launch it. Watchling has no Dock icon; it lives in the menu bar and as the pet on screen.
+Download the latest `.dmg` from [Releases](https://github.com/sht02048/watchling/releases/latest), move Watchling to Applications and launch it. It connects to Claude Code on first launch and shows a one-time notification.
 
-The app is ad-hoc signed and not notarized. If macOS refuses the first launch, right-click `Watchling.app` and choose **Open**. On macOS versions where that is not offered, use **System Settings → Privacy & Security → Open Anyway**.
+Requires macOS 13 or later on Apple silicon.
 
-## Claude Code hooks
+> [!NOTE]
+> Builds are not notarized yet. If macOS blocks the first launch, right-click Watchling and choose **Open**.
 
-Watchling learns about sessions through hooks in `~/.claude/settings.json`. When you launch it from `/Applications` or `~/Applications`, it connects itself: it adds its hooks if they are missing and leaves the file alone if they are already there. The first time it does this, macOS shows a notification. A copy run from the DMG, an App Translocation path or a development build never touches the file.
+## Usage
 
-To disconnect, turn off **Connected to Claude Code** in the menu bar icon's menu. That removes Watchling's hooks and remembers the choice, so later launches leave them out. Turn it back on to reconnect.
+### Peep's states
 
-The CLI still works for checking, previewing or managing the hooks yourself:
+<!-- Image: Peep in each state -->
 
-```sh
-/Applications/Watchling.app/Contents/MacOS/Watchling hooks check
-/Applications/Watchling.app/Contents/MacOS/Watchling hooks install            # preview
-/Applications/Watchling.app/Contents/MacOS/Watchling hooks install --apply
-/Applications/Watchling.app/Contents/MacOS/Watchling hooks uninstall --apply
+| Peep looks              | Meaning                                          |
+| ----------------------- | ------------------------------------------------ |
+| Purple, speech bubble   | A session is waiting for your approval or answer |
+| Grey                    | Watchling missed some signals and can't tell     |
+| Orange                  | Claude is working                                |
+| Blue, companions on top | Only background agents are running               |
+| Coral                   | Nothing to do                                    |
+
+With several sessions open, Peep shows the one highest in this table. See [docs/state-model.md](docs/state-model.md) for the full rules.
+
+### Session list
+
+<!-- Image: session list grouped by project -->
+
+Click Peep to open the list, and click again or press <kbd>Esc</kbd> to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Hover a line to see the full session ID and copy it.
+
+### Menu bar
+
+Watchling has no Dock icon. Use the menu bar icon to show or hide Peep, turn the Claude Code connection on or off, and quit. Drag Peep anywhere on screen; it remembers where you left it.
+
+## How it works
+
+```
+Claude Code ──hook──▶ watchling-hook-emitter ──local socket──▶ Watchling ──▶ Peep
 ```
 
-Install adds only Watchling's own handlers and keeps the rest of the file. Uninstall removes exactly those handlers. A backup of the previous settings is kept in `~/Library/Application Support/watchling/hook-backups`.
+Watchling adds hooks to `~/.claude/settings.json`. For each event, Claude Code runs a small Swift helper that forwards a few fields to the app over a local Unix socket. Each hook has a one-second timeout, does nothing when the app isn't running, and never replies to Claude Code.
 
-Each handler checks that the helper still exists before running it, so if you delete Watchling without disconnecting, Claude Code keeps working and the hooks do nothing. If hooks were installed from another copy of the app, launching Watchling from `/Applications` or `~/Applications` moves them to the new helper path. Hooks written by older builds are upgraded in place.
+## Privacy
 
-## States
+The helper sends event metadata such as session and tool IDs, the event type, tool names, permission mode and the project folder name. Prompts, tool input and transcripts are never stored, shown or sent. Tool input is reduced to a one-way fingerprint inside the helper so permission requests can be matched to their tool calls. Watchling makes no network requests.
 
-The pet shows the most urgent state across sessions: `asking`, `unknown`, `working`, `background`, `idle`. See [docs/state-model.md](docs/state-model.md) for what each one means and when it changes, and [docs/claude-coverage.md](docs/claude-coverage.md) for the hook evidence behind it.
+## FAQ
 
-## Development
+**Peep doesn't react to my sessions.**
+Make sure Watchling runs from Applications and **Connected to Claude Code** is ticked in the menu bar menu. Sessions started before Watchling appear after their next prompt or tool call.
 
-| Command                 | What it does                                                                                                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm start`            | Build and run the app from source                                                                                                                                                     |
-| `pnpm dev`              | Run from source with watch: renderer edits reload the windows, main edits restart the app. Quits the installed app first; real Claude events still arrive through the installed hooks |
-| `pnpm playground`       | Open a browser page to preview every pet state                                                                                                                                        |
-| `pnpm build`            | Bundle main, preload and renderers into `dist/`                                                                                                                                       |
-| `pnpm build:helper`     | Build the Swift hook helper                                                                                                                                                           |
-| `pnpm build:local-app`  | Package the app and DMG into `build/release/`                                                                                                                                         |
-| `pnpm typecheck`        | Type-check the project                                                                                                                                                                |
-| `pnpm test:unit`        | Unit tests                                                                                                                                                                            |
-| `pnpm test:integration` | Hook helper integration tests                                                                                                                                                         |
-| `pnpm test:packaged`    | Package, then test the hooks CLI, auto-connect and relocation in a temp HOME                                                                                                          |
-| `pnpm test:e2e`         | Playwright window tests                                                                                                                                                               |
-| `pnpm format`           | Format with Prettier                                                                                                                                                                  |
+**Will it slow down Claude Code?**
+No. Each hook has a one-second timeout and returns nothing.
 
-`build/release/` holds the fused production app. `build/unfused/` holds the same app without Electron fuses so Playwright can drive it (`node scripts/drive-local-app.mjs`).
+**Can I approve permission requests from Peep?**
+No, by design. Watchling only tells you that a session needs you; you answer in the terminal.
+
+**What exactly does it change in my settings?**
+It adds only its own hook handlers and keeps the rest of `~/.claude/settings.json`. The previous file is backed up to `~/Library/Application Support/watchling/hook-backups`.
+
+## Uninstall
+
+1. Untick **Connected to Claude Code** in the menu bar menu and quit Watchling.
+2. Move Watchling to the Trash.
+3. Optionally delete `~/Library/Application Support/watchling`.
+
+If you trash the app first, Claude Code keeps working; the leftover hooks check for the helper and do nothing.
+
+## Build from source
+
+<details>
+<summary>Only needed for contributing or testing unreleased changes.</summary>
+<br>
+
+Requires macOS 13+ on Apple silicon, Node.js 24, pnpm 10 and the Xcode command line tools.
+
+```sh
+git clone https://github.com/sht02048/watchling.git
+cd watchling
+pnpm install
+pnpm dev
+```
+
+`pnpm build:local-app` packages the app and DMG into `build/release/`. Tests, scripts and project layout are described in [CLAUDE.md](CLAUDE.md).
+
+</details>
+
+## Contributing
+
+Issues and pull requests are welcome. Run `pnpm typecheck`, `pnpm test:unit` and `pnpm test:integration` before opening a pull request, and keep the privacy rule: no prompts, tool input or transcripts may be stored, logged, shown or sent.
+
+## License
+
+[MIT](LICENSE). Watchling is an independent project and is not affiliated with Anthropic.
