@@ -25,6 +25,7 @@ public struct ClaudeEvent: Encodable, Equatable, Sendable {
     public let stopHookActive: Bool?
     public let childAgentId: String?
     public let childStatus: String?
+    public let subagentKind: String?
     public let toolCalls: [ToolCall]?
     public let backgroundTasks: [BackgroundTask]?
     public let inputFingerprint: String?
@@ -66,6 +67,7 @@ private enum RawKey: String, CodingKey {
     case toolCalls = "tool_calls"
     case backgroundTasks = "background_tasks"
     case toolInput = "tool_input"
+    case agentType = "agent_type"
 }
 
 private extension KeyedDecodingContainer {
@@ -235,6 +237,14 @@ private struct DecodedProjection: Decodable {
             childStatus = "resumed"
         }
 
+        // agent_type can be a user-defined name; only the closed kind leaves the helper.
+        var subagentKind: String?
+        if eventName == "SubagentStart",
+            (try? values.decodeIfPresent(String.self, forKey: .agentType)) == "workflow-subagent"
+        {
+            subagentKind = "workflow"
+        }
+
         var inputFingerprint: String?
         if Self.fingerprintedEvents.contains(eventName), let toolName,
             let key = decoder.userInfo[Self.fingerprintKey] as? Data,
@@ -248,7 +258,7 @@ private struct DecodedProjection: Decodable {
             promptId: promptId, agentId: agentId, permissionMode: permissionMode,
             toolName: toolName, toolUseId: toolUseId, notificationType: notificationType,
             isInterrupt: isInterrupt, stopHookActive: stopHookActive,
-            childAgentId: childAgentId, childStatus: childStatus,
+            childAgentId: childAgentId, childStatus: childStatus, subagentKind: subagentKind,
             toolCalls: toolCalls, backgroundTasks: backgroundTasks,
             inputFingerprint: inputFingerprint, interactive: nil
         )

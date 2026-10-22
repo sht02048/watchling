@@ -176,6 +176,39 @@ test("batch and background metadata stay bounded and contain no content", () => 
     false,
   );
 });
+test("subagent kind is a closed value only on SubagentStart", () => {
+  const start = {
+    eventName: "SubagentStart",
+    sessionId: "s1",
+    project: "p",
+    agentId: "agent-1",
+  };
+  assert.equal(isClaudeEvent({ ...start, subagentKind: "workflow" }), true);
+  for (const invalid of [
+    "workflow-subagent",
+    "Workflow",
+    "custom-agent",
+    "",
+    1,
+    null,
+    ["workflow"],
+  ]) {
+    assert.equal(isClaudeEvent({ ...start, subagentKind: invalid }), false);
+  }
+  for (const eventName of ["SubagentStop", "PostToolUse", "Stop"]) {
+    assert.equal(
+      isClaudeEvent({
+        ...start,
+        eventName,
+        toolName: "Workflow",
+        toolUseId: "toolu_1",
+        subagentKind: "workflow",
+      }),
+      false,
+    );
+  }
+  assert.equal(isClaudeEvent({ ...start, agentType: "workflow" }), false);
+});
 test("interactivity and input fingerprints are bounded metadata", () => {
   const fingerprint = "0123456789abcdef0123456789abcdef";
   assert.equal(

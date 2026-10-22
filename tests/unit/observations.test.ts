@@ -761,6 +761,111 @@ test("companions count background agents across sessions up to three", () => {
   assert.equal(observations.snapshot().companions, 2);
 });
 
+const workflowStart = (agentId: string, sessionId = "session-1") =>
+  event("SubagentStart", { sessionId, agentId, subagentKind: "workflow" });
+
+test("workflow subagents keep a finished turn in the background state", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", { toolName: "Workflow", toolUseId: "wf" }),
+    workflowStart("w1"),
+    workflowStart("w2"),
+    event("Stop", { backgroundTasks: [] }),
+  );
+  assert.equal(stateOf(observations), "background");
+  assert.equal(observations.snapshot().companions, 2);
+  assert.deepEqual(only(observations).detail, { kind: "agents", count: 2 });
+  feed(observations, event("SubagentStop", { agentId: "w1" }));
+  assert.equal(stateOf(observations), "background");
+  feed(observations, event("SubagentStop", { agentId: "w2" }));
+  assert.equal(stateOf(observations), "idle");
+  assert.equal(observations.snapshot().companions, 0);
+});
+
+test("only workflow-kind subagent starts are counted", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("SubagentStart", { agentId: "fg" }),
+    event("SubagentStart", { subagentKind: "workflow" }),
+    event("Stop"),
+  );
+  assert.equal(stateOf(observations), "idle");
+  assert.equal(observations.snapshot().companions, 0);
+});
+
+test("duplicate workflow starts count once and stray stops are ignored", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("SubagentStop", { agentId: "ghost" }),
+    workflowStart("w1"),
+    workflowStart("w1"),
+    event("SubagentStop", { agentId: "ghost" }),
+  );
+  assert.equal(stateOf(observations), "background");
+  assert.equal(observations.snapshot().companions, 1);
+  assert.deepEqual(only(observations).detail, { kind: "agents", count: 1 });
+});
+
+test("workflow agent overflow marks the session unknown", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    ...Array.from({ length: 32 }, (_, index) => workflowStart(`w${index}`)),
+  );
+  assert.equal(stateOf(observations), "background");
+  feed(observations, workflowStart("w0"));
+  assert.equal(stateOf(observations), "background");
+  feed(observations, workflowStart("w32"));
+  assert.equal(stateOf(observations), "unknown");
+});
+
+test("workflow and async agents share the background state and companions", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: "t1",
+      childAgentId: "a1",
+      childStatus: "async_launched",
+    }),
+    workflowStart("w1"),
+    workflowStart("w2"),
+    workflowStart("w3"),
+  );
+  assert.equal(stateOf(observations), "working");
+  assert.equal(observations.snapshot().companions, 3);
+  feed(observations, event("Stop", { backgroundTasks: [] }));
+  assert.equal(stateOf(observations), "background");
+  assert.deepEqual(only(observations).detail, { kind: "agents", count: 3 });
+  feed(
+    observations,
+    event("SubagentStop", { agentId: "w1" }),
+    event("SubagentStop", { agentId: "w2" }),
+    event("SubagentStop", { agentId: "w3" }),
+  );
+  assert.equal(stateOf(observations), "idle");
+});
+
+test("workflow agents end with their session and skip tombstones", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    workflowStart("w1"),
+    event("SessionEnd"),
+    workflowStart("w2"),
+  );
+  assert.deepEqual(observations.snapshot().sessions, []);
+  assert.equal(observations.snapshot().companions, 0);
+});
+
 function clock(start = 1_000) {
   let at = start;
   return {

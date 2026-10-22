@@ -152,6 +152,48 @@ final class ProjectionTests: XCTestCase {
             XCTAssertEqual(event.isInterrupt, true)
             XCTAssertNil(event.childAgentId)
             XCTAssertNil(event.childStatus)
+            XCTAssertNil(event.subagentKind)
+        }
+    }
+
+    func testWorkflowSubagentStartProjectsOnlyTheClosedKind() throws {
+        let start = try XCTUnwrap(project([
+            "hook_event_name": "SubagentStart", "agent_id": "agent:wf-1",
+            "agent_type": "workflow-subagent",
+        ]))
+        XCTAssertEqual(start.agentId, "agent:wf-1")
+        XCTAssertEqual(start.subagentKind, "workflow")
+        let encoded = String(decoding: try JSONEncoder().encode(start), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("workflow-subagent"))
+
+        let stop = try XCTUnwrap(project([
+            "hook_event_name": "SubagentStop", "agent_id": "agent:wf-1",
+            "agent_type": "workflow-subagent",
+        ]))
+        XCTAssertNil(stop.subagentKind)
+        for eventName in ["PostToolUse", "Stop"] {
+            let other = try XCTUnwrap(project([
+                "hook_event_name": eventName, "tool_name": "Workflow", "tool_use_id": "tool.1",
+                "agent_type": "workflow-subagent",
+            ]))
+            XCTAssertNil(other.subagentKind)
+        }
+    }
+
+    func testOtherAgentTypesAreNeverForwarded() throws {
+        let values: [Any] = [
+            "FIXTURE_CUSTOM_AGENT_SECRET", "Workflow-Subagent", "workflow-subagent ", "workflow",
+            "", 1, true, NSNull(), ["workflow-subagent"], ["kind": "workflow-subagent"],
+        ]
+        for value in values {
+            let event = try XCTUnwrap(project([
+                "hook_event_name": "SubagentStart", "agent_id": "agent:sub-1", "agent_type": value,
+            ]))
+            XCTAssertEqual(event.agentId, "agent:sub-1")
+            XCTAssertNil(event.subagentKind)
+            let encoded = String(decoding: try JSONEncoder().encode(event), as: UTF8.self)
+            XCTAssertFalse(encoded.contains("FIXTURE_CUSTOM_AGENT_SECRET"))
+            XCTAssertFalse(encoded.contains("subagentKind"))
         }
     }
 

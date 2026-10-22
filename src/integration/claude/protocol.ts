@@ -31,6 +31,7 @@ export interface ClaudeEvent {
   stopHookActive?: boolean;
   childAgentId?: string;
   childStatus?: "completed" | "async_launched" | "resumed";
+  subagentKind?: "workflow";
   toolCalls?: { toolName: string; toolUseId: string }[];
   backgroundTasks?: { id: string; type: string; status: string }[];
   interactive?: boolean;
@@ -96,6 +97,7 @@ const fields = new Set([
   "stopHookActive",
   "childAgentId",
   "childStatus",
+  "subagentKind",
   "toolCalls",
   "backgroundTasks",
   "interactive",
@@ -148,6 +150,11 @@ export function isClaudeEvent(value: unknown): value is ClaudeEvent {
     value.childStatus !== "completed" &&
     value.childStatus !== "async_launched" &&
     value.childStatus !== "resumed"
+  )
+    return false;
+  if (
+    "subagentKind" in value &&
+    (value.eventName !== "SubagentStart" || value.subagentKind !== "workflow")
   )
     return false;
   if (

@@ -28,6 +28,7 @@ interface Session {
   unkeyedAsk: Ask | null;
   pending: Map<string, string>;
   background: Set<string>;
+  workflow: Set<string>;
   activeTool: { id: string; name: string } | null;
   shown: SemanticState;
   since: number;
@@ -66,6 +67,10 @@ function addAsk(
     });
 }
 
+function agentCount(session: Session): number {
+  return session.background.size + session.workflow.size;
+}
+
 function display(session: Session): SemanticState {
   if (
     session.idAsks.size > 0 ||
@@ -74,8 +79,7 @@ function display(session: Session): SemanticState {
   )
     return "asking";
   if (session.unknown) return "unknown";
-  if (session.base === "idle" && session.background.size > 0)
-    return "background";
+  if (session.base === "idle" && agentCount(session) > 0) return "background";
   return session.base;
 }
 
@@ -97,7 +101,7 @@ function detail(session: Session, state: SemanticState): SessionDetail | null {
       ? { kind: "tool", tool: session.activeTool.name }
       : null;
   if (state === "background")
-    return { kind: "agents", count: session.background.size };
+    return { kind: "agents", count: agentCount(session) };
   return null;
 }
 
@@ -174,6 +178,7 @@ export class Observations {
         unkeyedAsk: null,
         pending: new Map(),
         background: new Set(),
+        workflow: new Set(),
         activeTool: null,
         shown: "idle",
         since: this.now(),
@@ -272,8 +277,21 @@ export class Observations {
         }
         activity();
         break;
+      case "SubagentStart":
+        if (
+          event.subagentKind === "workflow" &&
+          event.agentId &&
+          !session.workflow.has(event.agentId)
+        ) {
+          if (session.workflow.size >= MAX_BACKGROUND) session.unknown = true;
+          else session.workflow.add(event.agentId);
+        }
+        break;
       case "SubagentStop":
-        if (event.agentId) session.background.delete(event.agentId);
+        if (event.agentId) {
+          session.background.delete(event.agentId);
+          session.workflow.delete(event.agentId);
+        }
         break;
       case "PostToolBatch":
         for (const call of event.toolCalls ?? []) {
@@ -318,7 +336,7 @@ export class Observations {
     );
     let companions = 0;
     for (const session of this.sessions.values())
-      companions += session.background.size;
+      companions += agentCount(session);
     const projects = new Map<string, string[]>();
     for (const [id, session] of this.sessions)
       projects.set(session.project, [
