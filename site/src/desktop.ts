@@ -345,16 +345,22 @@ function buildDesktop(
     perched = true;
     const W = screen.clientWidth;
     const H = screen.clientHeight;
-    const colX = Math.max(32, W * 0.06);
     const colW = Math.min(440, W * 0.3);
+    const gap = Math.max(56, W * 0.05);
+    const termW = Math.min(
+      980,
+      W - Math.max(32, W * 0.06) - colW - gap - Math.max(32, W * 0.04),
+    );
+    const colX = Math.max(24, (W - colW - gap - termW) / 2);
     headline.style.width = `${Math.round(colW)}px`;
     states.element.style.width = `${Math.round(colW)}px`;
+    const band = dockRect().y;
     const fixed = headline.offsetHeight + 32 + states.element.offsetHeight + 8;
     const size = Math.round(
-      clamp((H - DOCK - 48 - fixed) / 0.8, 140, current.peepSize),
+      clamp((band - 48 - fixed) / 0.8, 140, current.peepSize),
     );
     desktop.style.setProperty("--peep-size", `${size}px`);
-    const top = Math.max(24, (H - DOCK - fixed - size * 0.8) / 2);
+    const top = Math.max(16, (band - fixed - size * 0.8) / 2);
     setBox(headline, colX, top);
     setBox(states.element, colX, top + headline.offsetHeight + 32);
     setBox(
@@ -362,14 +368,13 @@ function buildDesktop(
       colX - size * 0.16,
       states.element.offsetTop + states.element.offsetHeight + 8 - size * 0.06,
     );
-    const termX = colX + colW + Math.max(56, W * 0.05);
-    const termTop = current.peepSize * 0.82 + 2;
+    const termH = Math.max(300, H - DOCK - (current.peepSize * 0.82 + 2));
     setBox(
       terminalWindow.element,
-      termX,
-      termTop,
-      Math.min(980, W - termX - Math.max(32, W * 0.04)),
-      Math.max(300, H - DOCK - termTop),
+      colX + colW + gap,
+      Math.max(16, (band - termH) / 2),
+      termW,
+      termH,
     );
     placeBubble();
   }
