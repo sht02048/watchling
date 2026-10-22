@@ -6,7 +6,7 @@ Apple silicon only.
 
 ## Install
 
-1. Build the DMG with `npm run build:local-app`, or use one you were given. It is written to `build/release/pagent-<version>-arm64.dmg`.
+1. Build the DMG with `pnpm build:local-app`, or use one you were given. It is written to `build/release/pagent-<version>-arm64.dmg`.
 2. Open the DMG and drag `pagent.app` to `/Applications`.
 3. Launch it. pagent has no Dock icon; it lives in the menu bar and as the pet on screen.
 
@@ -33,18 +33,19 @@ The pet shows the most urgent state across sessions: `asking`, `unknown`, `worki
 
 ## Development
 
-| Command                    | What it does                                                   |
-| -------------------------- | -------------------------------------------------------------- |
-| `npm start`                | Build and run the app from source                              |
-| `npm run playground`       | Open a browser page to preview every pet state                 |
-| `npm run build`            | Bundle main, preload and renderers into `dist/`                |
-| `npm run build:helper`     | Build the Swift hook helper                                    |
-| `npm run build:local-app`  | Package the app and DMG into `build/release/`                  |
-| `npm run typecheck`        | Type-check the project                                         |
-| `npm run test:unit`        | Unit tests                                                     |
-| `npm run test:integration` | Hook helper integration tests                                  |
-| `npm run test:packaged`    | Package, then test the hooks CLI and relocation in a temp HOME |
-| `npm run test:e2e`         | Playwright window tests                                        |
-| `npm run format`           | Format with Prettier                                           |
+| Command                 | What it does                                                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm start`            | Build and run the app from source                                                                                                                                                     |
+| `pnpm dev`              | Run from source with watch: renderer edits reload the windows, main edits restart the app. Quits the installed app first; real Claude events still arrive through the installed hooks |
+| `pnpm playground`       | Open a browser page to preview every pet state                                                                                                                                        |
+| `pnpm build`            | Bundle main, preload and renderers into `dist/`                                                                                                                                       |
+| `pnpm build:helper`     | Build the Swift hook helper                                                                                                                                                           |
+| `pnpm build:local-app`  | Package the app and DMG into `build/release/`                                                                                                                                         |
+| `pnpm typecheck`        | Type-check the project                                                                                                                                                                |
+| `pnpm test:unit`        | Unit tests                                                                                                                                                                            |
+| `pnpm test:integration` | Hook helper integration tests                                                                                                                                                         |
+| `pnpm test:packaged`    | Package, then test the hooks CLI and relocation in a temp HOME                                                                                                                        |
+| `pnpm test:e2e`         | Playwright window tests                                                                                                                                                               |
+| `pnpm format`           | Format with Prettier                                                                                                                                                                  |
 
 `build/release/` holds the fused production app. `build/unfused/` holds the same app without Electron fuses so Playwright can drive it (`node scripts/drive-local-app.mjs`).

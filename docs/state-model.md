@@ -24,7 +24,7 @@ Events that arrive after `SessionEnd` are ignored unless they start a new turn, 
 
 No state changes on elapsed time alone. If the receiver fails to start, or a loss occurs while no session is known, the pet shows `unknown` rather than `idle`.
 
-Each running background subagent also appears as a small companion sitting on the pet's head, up to three, whatever the displayed state; they take the pet's current colors. Their look and motion come from `src/renderer/pet/companions.json`, tuned in the companions lab (`npm run playground`, then `/companions.html`).
+Each running background subagent also appears as a small companion sitting on the pet's head, up to three, whatever the displayed state; they take the pet's current colors. Their look and motion come from `src/renderer/pet/companions.json`, tuned in the companions lab (`pnpm playground`, then `/companions.html`).
 
 Background shell tasks are not counted, so a long-running dev server does not keep the pet out of `idle`. The launch `agentId` is assumed to match the `agent_id` on that subagent's `SubagentStop`; this has not been confirmed against a live session.
 

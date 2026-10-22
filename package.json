@@ -5,17 +5,19 @@
   "description": "A quiet, read-only desktop companion for coding agent sessions",
   "type": "module",
   "main": "dist/main/index.js",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:helper": "swift build --package-path native/hook-emitter -c release",
-    "build:local-app": "npm run build && npm run build:helper && node scripts/package.mjs",
+    "build:local-app": "pnpm build && pnpm build:helper && node scripts/package.mjs",
     "typecheck": "tsc --noEmit",
-    "start": "npm run build && electron .",
+    "start": "pnpm build && electron .",
+    "dev": "node scripts/dev.mjs",
     "playground": "node scripts/playground.mjs",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
-    "test:integration": "npm run build:helper && node --experimental-strip-types --test tests/integration/*.test.ts",
-    "test:packaged": "npm run build:local-app && node --experimental-strip-types --test tests/packaged/*.test.ts",
-    "test:e2e": "npm run build && npm run build:helper && playwright test",
+    "test:integration": "pnpm build:helper && node --experimental-strip-types --test tests/integration/*.test.ts",
+    "test:packaged": "pnpm build:local-app && node --experimental-strip-types --test tests/packaged/*.test.ts",
+    "test:e2e": "pnpm build && pnpm build:helper && playwright test",
     "format": "prettier --write src scripts tests package.json tsconfig.json playwright.config.ts"
   },
   "devDependencies": {
@@ -26,8 +28,5 @@
     "esbuild": "0.28.2",
     "prettier": "^3.6.0",
     "typescript": "7.0.2"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true
   }
 }
