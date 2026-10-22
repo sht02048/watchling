@@ -43,11 +43,9 @@ export class PreferenceStore {
         return { optedOut: value.optedOut, noticeShown: value.noticeShown };
       console.warn("Preferences skipped: invalid data");
     } catch (error) {
-      if (!(
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ))
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      )
         console.warn("Preferences skipped: unreadable data");
     }
     return { ...defaults };

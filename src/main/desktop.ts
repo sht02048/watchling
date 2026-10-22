@@ -85,7 +85,8 @@ let quitFlushed = false;
 let cleanupStarted = false;
 let startup: Promise<void> | undefined;
 let dragging:
-  { cursor: Point; origin: Point; moved: boolean; last?: Point } | undefined;
+  | { cursor: Point; origin: Point; moved: boolean; last?: Point }
+  | undefined;
 let hit = false;
 let listHiddenAt = 0;
 let pressClosedList = false;
