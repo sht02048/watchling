@@ -62,7 +62,11 @@ const config: ForgeConfig = {
       : {}),
   },
   // A fixed name keeps releases/latest/download/Watchling.dmg pointing at the newest build.
-  makers: [new MakerDMG({ name: "Watchling" }, ["darwin"])],
+  makers: [
+    new MakerDMG({ name: "Watchling", icon: "resources/icon.icns" }, [
+      "darwin",
+    ]),
+  ],
   publishers: [
     new PublisherGitHub({
       repository: { owner: "sht02048", name: "watchling" },
