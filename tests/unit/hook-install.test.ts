@@ -635,8 +635,85 @@ test("modified, moved, duplicated, and orphan ownership is refused without write
         );
       assert.deepEqual(await tree(f.home), before);
     }
-    await writeFile(f.paths.settingsPath, original);
     await unlink(f.paths.manifestPath);
+    for (const change of changes) {
+      const value: unknown = JSON.parse(original);
+      assert.ok(isRecord(value));
+      change(value);
+      await settings(f, value);
+      const before = await tree(f.home);
+      for (const operation of ["check", "install", "uninstall"] as const)
+        await refused(
+          manageClaudeHooks(
+            operation,
+            operation !== "check",
+            f.paths,
+            f.helper,
+          ),
+        );
+      assert.deepEqual(await tree(f.home), before);
+    }
+  });
+});
+
+test("unmodified handlers left without a manifest are adopted, kept, and removable", async () => {
+  await fixture(async (f) => {
+    const original = {
+      theme: "kept",
+      hooks: {
+        Stop: [{ matcher: "", hooks: [{ type: "command", command: "mine" }] }],
+      },
+    };
+    await settings(f, original);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const id = String((await json(f.paths.manifestPath)).installationId);
+    const installed = await readFile(f.paths.settingsPath, "utf8");
+    await rm(f.paths.userData, { recursive: true });
+
+    const check = await manageClaudeHooks("check", false, f.paths, f.helper);
+    assert.equal(check.watchling.status, "installed");
+    const result = await manageClaudeHooks("install", true, f.paths, f.helper);
+    assert.deepEqual(result.watchling.diff, []);
+    assert.equal(await readFile(f.paths.settingsPath, "utf8"), installed);
+    assert.equal((await json(f.paths.manifestPath)).installationId, id);
+    await manageClaudeHooks("uninstall", true, f.paths, f.helper);
+    assert.deepEqual(await json(f.paths.settingsPath), original);
+
+    await writeFile(f.paths.settingsPath, installed);
+    await rm(f.paths.userData, { recursive: true });
+    await manageClaudeHooks("uninstall", true, f.paths, f.helper);
+    assert.deepEqual(await json(f.paths.settingsPath), original);
+    await assert.rejects(lstat(f.paths.manifestPath), { code: "ENOENT" });
+  });
+});
+
+test("orphaned handlers follow a moved helper but mixed installations are refused", async () => {
+  await fixture(async (f) => {
+    await settings(f, { theme: "kept" });
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const installed = await readFile(f.paths.settingsPath, "utf8");
+    await unlink(f.paths.manifestPath);
+    const moved = join(f.home, "Applications", "watchling-hook-emitter");
+    await mkdir(dirname(moved), { mode: 0o700 });
+    await writeFile(moved, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    assert.equal(
+      (await relocateClaudeHooks(f.paths, moved))?.watchling.status,
+      "installed",
+    );
+    const relocated = await json(f.paths.settingsPath);
+    const id = String((await json(f.paths.manifestPath)).installationId);
+    for (const event of hookEvents)
+      assert.equal(
+        ownedHandler(relocated, event).command,
+        guardedCommand(f, id, moved),
+      );
+    await manageClaudeHooks("uninstall", true, f.paths, moved);
+    assert.deepEqual(await json(f.paths.settingsPath), { theme: "kept" });
+
+    const mixed: unknown = JSON.parse(installed);
+    assert.ok(isRecord(mixed));
+    ownedHandler(mixed, "Stop").command = guardedCommand(f, randomUUID());
+    await settings(f, mixed);
     const before = await tree(f.home);
     for (const operation of ["check", "install", "uninstall"] as const)
       await refused(

@@ -381,6 +381,83 @@ function createManifest(
     })),
   };
 }
+const execForm =
+  /^('(?:[^']|'\\'')*') '--installation-id' '([0-9a-f-]{36})' '--descriptor' /;
+const guardPrefix = /^if \[ -x '(?:[^']|'\\'')*' \]; then exec /;
+function orphanOwner(
+  handler: JsonObject,
+  descriptorPath: string,
+): { installationId: string; helperPath: string } | null {
+  if (typeof handler.command !== "string") return null;
+  const match = execForm.exec(handler.command.replace(guardPrefix, ""));
+  if (!match?.[1] || !match[2]) return null;
+  const helperPath = match[1].slice(1, -1).replaceAll("'\\''", "'");
+  const installationId = match[2];
+  if (
+    !isEpoch(installationId) ||
+    !safeAbsolute(helperPath) ||
+    basename(helperPath) !== "watchling-hook-emitter"
+  )
+    return null;
+  const forms = [intended, legacy].map((form) =>
+    form(installationId, helperPath, descriptorPath),
+  );
+  return forms.some((form) => exactObject(handler, form))
+    ? { installationId, helperPath }
+    : null;
+}
+// Trashing the app and its data leaves handlers without their manifest. Only
+// unmodified handlers of a single installation are adopted; anything else is refused.
+function recoverManifest(value: JsonObject, paths: AppPaths): Manifest | null {
+  let owner: ReturnType<typeof orphanOwner> = null;
+  for (const { handler } of locations(value)) {
+    const found = orphanOwner(handler, paths.descriptorPath);
+    if (!found) continue;
+    if (
+      owner &&
+      (owner.installationId !== found.installationId ||
+        owner.helperPath !== found.helperPath)
+    )
+      return null;
+    owner = found;
+  }
+  if (!owner) return null;
+  const handler = intended(
+    owner.installationId,
+    owner.helperPath,
+    paths.descriptorPath,
+  );
+  const hooks = isRecord(value.hooks) ? value.hooks : {};
+  const owned = hookEvents.map((event) => {
+    const groups = hooks[event];
+    const only = Array.isArray(groups) && groups.length === 1 && groups[0];
+    return {
+      event,
+      matcher: event === "Notification" ? "permission_prompt" : "",
+      handler: { ...handler },
+      createdEvent:
+        !Array.isArray(groups) ||
+        (isRecord(only) &&
+          Array.isArray(only.hooks) &&
+          only.hooks.length === 1 &&
+          isRecord(only.hooks[0]) &&
+          orphanOwner(only.hooks[0], paths.descriptorPath) !== null),
+    };
+  });
+  return {
+    version: 1,
+    installationId: owner.installationId,
+    settingsPath: paths.settingsPath,
+    helperPath: owner.helperPath,
+    descriptorPath: paths.descriptorPath,
+    createdHooks:
+      owned.every((hook) => hook.createdEvent) &&
+      Object.keys(hooks).every((event) =>
+        (hookEvents as readonly string[]).includes(event),
+      ),
+    hooks: owned,
+  };
+}
 function exactObject(a: unknown, b: unknown): boolean {
   if (isRecord(a) && isRecord(b)) {
     const keys = Object.keys(a);
@@ -547,7 +624,7 @@ async function inspect(
   );
   const manifest = manifestSnapshot
     ? manifestObject(parse(manifestSnapshot), paths)
-    : null;
+    : recoverManifest(settings.value, paths);
   return {
     settings,
     manifest,
@@ -983,8 +1060,7 @@ async function removeManifest(
 ): Promise<void> {
   try {
     await assertLock(paths, lock);
-    if (!state.manifest || !state.manifestSnapshot)
-      failed("Installation manifest is missing");
+    if (!state.manifest) failed("Installation manifest is missing");
     const current = await readSettings(paths, home);
     if (!sameSnapshot(expected, current.snapshot))
       failed("Settings changed before removal verification");
@@ -1008,6 +1084,7 @@ async function removeManifest(
   } catch {
     failed("Removal verification failed; the manifest was retained");
   }
+  if (!state.manifestSnapshot) return;
   await unlink(paths.manifestPath);
   await syncDirectory(paths.userData);
 }
