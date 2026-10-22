@@ -5,6 +5,7 @@ import { Window } from "@/components/window/Window.tsx";
 import styles from "./Terminal.module.css";
 import { TerminalLine } from "./TerminalLine.tsx";
 import { TerminalPrompt, type PromptActions } from "./TerminalPrompt.tsx";
+import { useAnimatedHeight } from "./useAnimatedHeight.ts";
 
 function footerText(kind: Prompt["kind"], coarse: boolean): string {
   if (kind === "busy") return "? for shortcuts";
@@ -27,10 +28,15 @@ function Terminal({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const promptRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const scroll = scrollRef.current;
     if (scroll) scroll.scrollTop = scroll.scrollHeight;
   }, [terminal.lines.length, terminal.prompt]);
+  useAnimatedHeight(promptRef, terminal.prompt, () => {
+    const scroll = scrollRef.current;
+    if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  });
 
   return (
     <div ref={rootRef} className={styles.term}>
@@ -48,7 +54,7 @@ function Terminal({
           ))}
         </ol>
       </div>
-      <div className={styles.prompt}>
+      <div ref={promptRef} className={styles.prompt}>
         <TerminalPrompt
           prompt={terminal.prompt}
           found={found}
