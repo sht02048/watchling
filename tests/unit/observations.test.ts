@@ -654,6 +654,26 @@ test("background subagents keep a finished turn in the background state", () => 
   assert.equal(stateOf(observations), "idle");
 });
 
+test("a background subagent resumed with SendMessage rides again until it stops", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", {
+      toolName: "SendMessage",
+      toolUseId: "send-1",
+      childAgentId: "a1",
+      childStatus: "resumed",
+    }),
+    event("Stop"),
+  );
+  assert.equal(stateOf(observations), "background");
+  assert.equal(observations.snapshot().companions, 1);
+  feed(observations, event("SubagentStop", { agentId: "a1" }));
+  assert.equal(stateOf(observations), "idle");
+  assert.equal(observations.snapshot().companions, 0);
+});
+
 test("foreground subagents and other states outrank background", () => {
   const observations = new Observations();
   feed(

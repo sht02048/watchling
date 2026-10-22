@@ -262,7 +262,11 @@ export class Observations {
           if (count !== undefined && count > 1) session.unknown = true;
         }
         session.unkeyedAsk = null;
-        if (event.childStatus === "async_launched" && event.childAgentId) {
+        if (
+          (event.childStatus === "async_launched" ||
+            event.childStatus === "resumed") &&
+          event.childAgentId
+        ) {
           if (session.background.size >= MAX_BACKGROUND) session.unknown = true;
           else session.background.add(event.childAgentId);
         }

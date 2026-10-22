@@ -30,7 +30,7 @@ export interface ClaudeEvent {
   isInterrupt?: boolean;
   stopHookActive?: boolean;
   childAgentId?: string;
-  childStatus?: "completed" | "async_launched";
+  childStatus?: "completed" | "async_launched" | "resumed";
   toolCalls?: { toolName: string; toolUseId: string }[];
   backgroundTasks?: { id: string; type: string; status: string }[];
   interactive?: boolean;
@@ -146,7 +146,8 @@ export function isClaudeEvent(value: unknown): value is ClaudeEvent {
   if (
     "childStatus" in value &&
     value.childStatus !== "completed" &&
-    value.childStatus !== "async_launched"
+    value.childStatus !== "async_launched" &&
+    value.childStatus !== "resumed"
   )
     return false;
   if (

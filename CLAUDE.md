@@ -34,6 +34,7 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 - **Real settings:** tests and scripts must run the app with a temporary `HOME`. Never touch the developer's real `~/.claude/settings.json`.
 - **Do not run `tests/e2e/native-window.test.ts`** unattended; it moves the real mouse.
 - **Do not build while `pnpm dev` runs.** `pnpm build`, `test:e2e` and `test:packaged` recreate `dist/` and break the dev renderer watcher.
+- **Helper changes need a reinstall.** Claude Code always runs the helper inside the installed `/Applications/Watchling.app`, and `pnpm dev` receives events through it. After changing `native/hook-emitter`, run `pnpm build:local-app` and install the new app before checking real sessions.
 - **Verify UI in a real Electron window.** The app CSP is strict (`img-src 'self'`, `style-src 'self'`, `script-src 'self'`), so `data:` URLs, `<style>` blocks and `style=""` attributes that work in a plain browser do not render in the app. Setting styles from scripts through `element.style` still works. Draw icons as inline SVG elements.
 - **English** for all code, UI text, tests and docs. Match surrounding style; add comments only for non-obvious constraints.
 

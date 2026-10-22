@@ -184,6 +184,31 @@ final class ProjectionTests: XCTestCase {
         }
     }
 
+    func testSendMessageResumeProjectsResumedChild() throws {
+        let resumed = try XCTUnwrap(project([
+            "hook_event_name": "PostToolUse", "tool_name": "SendMessage", "tool_use_id": "tool:send",
+            "tool_response": [
+                "success": true, "message": "MESSAGE_SECRET",
+                "resumedAgentId": "agent:child", "revivedAgentId": "agent:child",
+            ],
+        ]))
+        XCTAssertEqual(resumed.childAgentId, "agent:child")
+        XCTAssertEqual(resumed.childStatus, "resumed")
+
+        let ignored: [Any] = [
+            "Message sent", ["success": true], ["success": false, "resumedAgentId": "agent:child"],
+            ["success": true, "resumedAgentId": "bad/id"],
+        ]
+        for response in ignored {
+            let event = try XCTUnwrap(project([
+                "hook_event_name": "PostToolUse", "tool_name": "SendMessage",
+                "tool_use_id": "tool:send", "tool_response": response,
+            ]))
+            XCTAssertNil(event.childAgentId)
+            XCTAssertNil(event.childStatus)
+        }
+    }
+
     func testChildMetadataIsNotInferredFromOtherToolsOrHooks() throws {
         for (eventName, toolName) in [
             ("PostToolUse", "Bash"), ("PostToolUse", "Task"),

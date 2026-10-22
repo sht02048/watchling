@@ -125,6 +125,11 @@ private struct RawBackgroundTask: Decodable {
     let status: String
 }
 
+private struct ResumeResponse: Decodable {
+    let success: Bool?
+    let resumedAgentId: String?
+}
+
 private struct AgentResponse: Decodable {
     let agentId: String?
     let status: String?
@@ -222,6 +227,12 @@ private struct DecodedProjection: Decodable {
         {
             childAgentId = response.agentId
             childStatus = response.status
+        } else if eventName == "PostToolUse" && toolName == "SendMessage",
+            let response = try? values.decodeIfPresent(ResumeResponse.self, forKey: .toolResponse),
+            response.success == true, let resumed = response.resumedAgentId, isId(resumed)
+        {
+            childAgentId = resumed
+            childStatus = "resumed"
         }
 
         var inputFingerprint: String?
