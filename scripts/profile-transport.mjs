@@ -95,7 +95,7 @@ process.once("SIGTERM", interruptBuild);
 try {
   // The public CLI and helper MUST come from this freshly built local package.
   await new Promise((done, reject) => {
-    buildProcess = spawn("npm", ["run", "build:local-app"], {
+    buildProcess = spawn("npm", ["run", "make"], {
       stdio: "inherit",
       detached: true,
     });

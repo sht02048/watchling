@@ -12,7 +12,8 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 | `pnpm test:integration` | Builds the Swift helper, then runs `tests/integration` |
 | `pnpm test:e2e tests/e2e/window.test.ts` | Playwright against Electron with a temporary `HOME` |
 | `pnpm test:packaged` | Builds the app and checks hook install/relocation in packaged form |
-| `pnpm build:local-app` | Fused, ad-hoc signed app in `build/release/Watchling-darwin-arm64/`, DMG in `build/release/make/dmg/arm64/`, unfused app for Playwright in `build/unfused/` |
+| `pnpm package` | Fused, ad-hoc signed app in `build/release/Watchling-darwin-arm64/`; also refreshes `.vite/` for `electron .` |
+| `pnpm make` | `package` plus the DMG in `build/release/make/dmg/arm64/` and the unfused app for Playwright in `build/unfused/` |
 | `pnpm playground` | Browser labs for pet states, companions and the asking cue at http://127.0.0.1:5178/ |
 | `pnpm format` | Prettier |
 
@@ -34,7 +35,7 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 - **Read-only:** the app never answers a permission prompt or writes back to Claude Code.
 - **Real settings:** tests and scripts must run the app with a temporary `HOME`. Never touch the developer's real `~/.claude/settings.json`.
 - **Do not run `tests/e2e/native-window.test.ts`** unattended; it moves the real mouse.
-- **Do not build while `pnpm dev` runs.** `pnpm build`, `test:e2e` and `test:packaged` rewrite `.vite/build/` with the production bundle, which the next `r` restart would load.
+- **Do not build while `pnpm dev` runs.** `pnpm package`, `pnpm make`, `test:e2e` and `test:packaged` rewrite `.vite/build/` with the production bundle, which the next `r` restart would load.
 - **Verify UI in a real Electron window.** The app CSP is strict (`img-src 'self'`, `style-src 'self'`, `script-src 'self'`), so `data:` URLs, `<style>` blocks and `style=""` attributes that work in a plain browser do not render in the app. Setting styles from scripts through `element.style` still works. Draw icons as inline SVG elements.
 - **English** for all code, UI text, tests and docs. Match surrounding style; add comments only for non-obvious constraints.
 

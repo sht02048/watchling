@@ -109,7 +109,7 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm build:local-app` packages the app and DMG into `build/release/`. Tests, scripts and project layout are described in [CLAUDE.md](CLAUDE.md).
+`pnpm make` packages the app and DMG into `build/release/`. Tests, scripts and project layout are described in [CLAUDE.md](CLAUDE.md).
 
 </details>
 

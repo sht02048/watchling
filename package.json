@@ -8,17 +8,17 @@
   "main": ".vite/build/main.cjs",
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "build": "electron-forge package",
+    "package": "electron-forge package",
     "build:helper": "swift build --package-path native/hook-emitter -c release",
-    "build:local-app": "electron-forge make && WATCHLING_UNFUSED=1 electron-forge package",
+    "make": "electron-forge make && WATCHLING_UNFUSED=1 electron-forge package",
     "typecheck": "tsc --noEmit",
-    "start": "pnpm build && electron .",
+    "start": "pnpm package && electron .",
     "dev": "electron-forge start",
     "playground": "node scripts/playground.mjs",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
     "test:integration": "pnpm build:helper && node --experimental-strip-types --test tests/integration/*.test.ts",
-    "test:packaged": "pnpm build:local-app && node --experimental-strip-types --test tests/packaged/*.test.ts",
-    "test:e2e": "pnpm build && playwright test",
+    "test:packaged": "pnpm make && node --experimental-strip-types --test tests/packaged/*.test.ts",
+    "test:e2e": "pnpm package && playwright test",
     "format": "prettier --write src scripts tests package.json tsconfig.json playwright.config.ts forge.config.mts vite.*.config.mts"
   },
   "devDependencies": {
