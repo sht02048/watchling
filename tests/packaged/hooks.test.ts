@@ -109,7 +109,7 @@ test("packaged apply refuses symlink and nonregular settings without changing ta
   }
 });
 
-test("packaged app relocates hooks only when launched from Applications", async () => {
+test("packaged app connects and relocates hooks only when launched from Applications", async () => {
   const home = await realpath(
     await mkdtemp(join(tmpdir(), "watchling-packaged-")),
   );
@@ -152,17 +152,46 @@ test("packaged app relocates hooks only when launched from Applications", async 
     await new Promise((done) => setTimeout(done, 1000));
     return true;
   };
+  const preferences = (value: { optedOut: boolean; noticeShown: boolean }) =>
+    writeFile(join(paths.userData, "preferences.json"), JSON.stringify(value), {
+      mode: 0o600,
+    });
   const original = { theme: "dark", nested: { keep: [1, 2] } };
   try {
     await mkdir(join(home, ".claude"), { mode: 0o700 });
     await writeFile(paths.settingsPath, JSON.stringify(original), {
       mode: 0o600,
     });
+    await mkdir(paths.userData, { recursive: true, mode: 0o700 });
+    await preferences({ optedOut: false, noticeShown: true });
     await mkdir(join(home, "Applications"));
     await execute("/bin/cp", ["-cR", built, installed]);
     const untouched = await readFile(paths.settingsPath);
-    assert.equal(await launch(installed, settled), true);
+    assert.equal(await launch(built, settled), true);
     assert.deepEqual(await readFile(paths.settingsPath), untouched);
+    await assert.rejects(readFile(paths.manifestPath), { code: "ENOENT" });
+
+    assert.equal(
+      await launch(
+        installed,
+        async () =>
+          (await manifestHelper()) === helper(installed) &&
+          (await readFile(paths.settingsPath, "utf8")).includes(
+            helper(installed),
+          ),
+      ),
+      true,
+    );
+    assert.equal(
+      (await readFile(paths.settingsPath, "utf8")).includes(helper(installed)),
+      true,
+    );
+
+    await cli(installed, "uninstall", "--apply");
+    await preferences({ optedOut: true, noticeShown: true });
+    const disconnected = await readFile(paths.settingsPath);
+    assert.equal(await launch(installed, settled), true);
+    assert.deepEqual(await readFile(paths.settingsPath), disconnected);
     await assert.rejects(readFile(paths.manifestPath), { code: "ENOENT" });
 
     await cli(built, "install", "--apply");
@@ -170,7 +199,11 @@ test("packaged app relocates hooks only when launched from Applications", async 
     assert.equal(
       await launch(
         installed,
-        async () => (await manifestHelper()) === helper(installed),
+        async () =>
+          (await manifestHelper()) === helper(installed) &&
+          (await readFile(paths.settingsPath, "utf8")).includes(
+            helper(installed),
+          ),
       ),
       true,
     );

@@ -59,11 +59,14 @@ interface Location {
   group: JsonObject;
   handler: JsonObject;
 }
+interface OwnedLocation extends Location {
+  legacy: boolean;
+}
 interface State {
   settings: Settings;
   manifest: Manifest | null;
   manifestSnapshot: Snapshot | null;
-  owned: Map<string, Location>;
+  owned: Map<string, OwnedLocation>;
 }
 export interface HookReport {
   mode: "check" | "preview" | "apply";
@@ -82,7 +85,11 @@ export interface HookReport {
       | "partial"
       | "would-install"
       | "would-uninstall";
-    diff: { event: string; matcher: string; action: "add" | "remove" }[];
+    diff: {
+      event: string;
+      matcher: string;
+      action: "add" | "update" | "remove";
+    }[];
   };
 }
 
@@ -315,6 +322,21 @@ async function readSettings(paths: AppPaths, home: string): Promise<Settings> {
 export function quoteHookArgument(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
+function helperCommand(
+  installationId: string,
+  helperPath: string,
+  descriptorPath: string,
+): string {
+  return [
+    helperPath,
+    "--installation-id",
+    installationId,
+    "--descriptor",
+    descriptorPath,
+  ]
+    .map(quoteHookArgument)
+    .join(" ");
+}
 function intended(
   installationId: string,
   helperPath: string,
@@ -322,15 +344,18 @@ function intended(
 ): Handler {
   return {
     type: "command",
-    command: [
-      helperPath,
-      "--installation-id",
-      installationId,
-      "--descriptor",
-      descriptorPath,
-    ]
-      .map(quoteHookArgument)
-      .join(" "),
+    command: `if [ -x ${quoteHookArgument(helperPath)} ]; then exec ${helperCommand(installationId, helperPath, descriptorPath)}; fi`,
+    timeout: 1,
+  };
+}
+function legacy(
+  installationId: string,
+  helperPath: string,
+  descriptorPath: string,
+): Handler {
+  return {
+    type: "command",
+    command: helperCommand(installationId, helperPath, descriptorPath),
     timeout: 1,
   };
 }
@@ -391,6 +416,11 @@ function manifestObject(value: unknown, paths: AppPaths): Manifest {
     value.helperPath,
     paths.descriptorPath,
   );
+  const previous = legacy(
+    value.installationId,
+    value.helperPath,
+    paths.descriptorPath,
+  );
   const hooks: OwnedHook[] = [];
   for (const [index, event] of hookEvents.entries()) {
     const item: unknown = value.hooks[index];
@@ -398,12 +428,14 @@ function manifestObject(value: unknown, paths: AppPaths): Manifest {
       !isRecord(item) ||
       typeof item.createdEvent !== "boolean" ||
       (value.createdHooks && !item.createdEvent) ||
-      !exactObject(item, {
-        event,
-        matcher: event === "Notification" ? "permission_prompt" : "",
-        handler,
-        createdEvent: item.createdEvent,
-      })
+      ![handler, previous].some((form) =>
+        exactObject(item, {
+          event,
+          matcher: event === "Notification" ? "permission_prompt" : "",
+          handler: form,
+          createdEvent: item.createdEvent,
+        }),
+      )
     )
       refuse("Unsafe or unsupported manifest ownership records");
     hooks.push({
@@ -452,8 +484,8 @@ function ownership(
   manifest: Manifest | null,
   helperPath: string,
   descriptorPath: string,
-): Map<string, Location> {
-  const owned = new Map<string, Location>();
+): Map<string, OwnedLocation> {
+  const owned = new Map<string, OwnedLocation>();
   for (const location of locations(value)) {
     const command = location.handler.command;
     const text = JSON.stringify(location.handler);
@@ -477,16 +509,26 @@ function ownership(
     const expected = manifest.hooks.find(
       (hook) => hook.event === location.event,
     );
+    const previous =
+      expected !== undefined &&
+      exactObject(
+        location.handler,
+        legacy(
+          manifest.installationId,
+          manifest.helperPath,
+          manifest.descriptorPath,
+        ),
+      );
     if (
       !expected ||
       location.group.matcher !== expected.matcher ||
-      !exactObject(location.handler, expected.handler) ||
+      !(previous || exactObject(location.handler, expected.handler)) ||
       owned.has(expected.event)
     )
       refuse(
         "Owned hook was modified, moved, duplicated, or conflicts with the helper",
       );
-    owned.set(expected.event, location);
+    owned.set(expected.event, { ...location, legacy: previous });
   }
   return owned;
 }
@@ -609,19 +651,30 @@ async function discardTemporary(path: string): Promise<void> {
     if (!hasCode(error, "ENOENT")) throw error;
   }
 }
+function manifestBytes(manifest: Manifest): Buffer {
+  return Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+}
 async function publishManifest(
   paths: AppPaths,
   manifest: Manifest,
+  previous: Snapshot | null,
   lock: OwnedLock,
 ): Promise<Snapshot> {
-  const bytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+  const bytes = manifestBytes(manifest);
   if (bytes.length > MANIFEST_LIMIT)
     refuse("Installation manifest exceeds its size limit");
   await assertLock(paths, lock);
   const temp = await temporary(paths.manifestPath, bytes);
   try {
     await assertLock(paths, lock);
-    if (await metadata(paths.manifestPath))
+    if (
+      previous
+        ? !sameSnapshot(
+            previous,
+            await readBounded(paths.manifestPath, MANIFEST_LIMIT, true),
+          )
+        : await metadata(paths.manifestPath)
+    )
       failed("Installation manifest changed before publication");
     await rename(temp, paths.manifestPath);
     await syncDirectory(paths.userData);
@@ -822,14 +875,18 @@ function plan(
   manifest: Manifest,
   operation: HookOperation,
 ): HookReport["watchling"]["diff"] {
-  const action = operation === "uninstall" ? "remove" : "add";
-  return manifest.hooks
-    .filter((hook) =>
+  const diff: HookReport["watchling"]["diff"] = [];
+  for (const hook of manifest.hooks) {
+    const location = state.owned.get(hook.event);
+    const action =
       operation === "uninstall"
-        ? state.owned.has(hook.event)
-        : !state.owned.has(hook.event),
-    )
-    .map((hook) => ({ event: hook.event, matcher: hook.matcher, action }));
+        ? location && "remove"
+        : location
+          ? location.legacy && "update"
+          : "add";
+    if (action) diff.push({ event: hook.event, matcher: hook.matcher, action });
+  }
+  return diff;
 }
 function changeSettings(
   state: State,
@@ -841,7 +898,12 @@ function changeSettings(
     if (!isRecord(value.hooks)) value.hooks = {};
     const hooks = value.hooks as JsonObject;
     for (const hook of manifest.hooks) {
-      if (state.owned.has(hook.event)) continue;
+      const location = state.owned.get(hook.event);
+      if (location?.legacy) {
+        const handlers = location.group.hooks as JsonObject[];
+        handlers[handlers.indexOf(location.handler)] = { ...hook.handler };
+      }
+      if (location) continue;
       if (!Object.hasOwn(hooks, hook.event)) hooks[hook.event] = [];
       // A separate group avoids taking ownership of any pre-existing matcher group.
       (hooks[hook.event] as unknown[]).push({
@@ -1009,7 +1071,10 @@ export async function manageClaudeHooks(
   }
   if (
     (operation === "uninstall" && !state.manifest) ||
-    (operation === "install" && state.manifest && diff.length === 0)
+    (operation === "install" &&
+      state.manifest &&
+      diff.length === 0 &&
+      state.manifestSnapshot?.hash === hash(manifestBytes(state.manifest)))
   )
     return report(operation, true, paths, helperPath, state, diff);
 
@@ -1033,8 +1098,16 @@ export async function manageClaudeHooks(
     const bytes = diff.length
       ? changeSettings(state, manifest, operation)
       : null;
-    if (operation === "install" && !state.manifest) {
-      state.manifestSnapshot = await publishManifest(paths, manifest, lock);
+    if (
+      operation === "install" &&
+      state.manifestSnapshot?.hash !== hash(manifestBytes(manifest))
+    ) {
+      state.manifestSnapshot = await publishManifest(
+        paths,
+        manifest,
+        state.manifestSnapshot,
+        lock,
+      );
       state.manifest = manifest;
     }
     const written = bytes

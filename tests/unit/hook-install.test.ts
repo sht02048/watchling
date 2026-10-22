@@ -96,6 +96,20 @@ function ownedHandler(value: JsonObject, event: string): JsonObject {
   assert.ok(isRecord(handler));
   return handler;
 }
+function plainCommand(f: Fixture, installationId: string, helper = f.helper) {
+  return [
+    helper,
+    "--installation-id",
+    installationId,
+    "--descriptor",
+    f.paths.descriptorPath,
+  ]
+    .map(quoteHookArgument)
+    .join(" ");
+}
+function guardedCommand(f: Fixture, installationId: string, helper = f.helper) {
+  return `if [ -x ${quoteHookArgument(helper)} ]; then exec ${plainCommand(f, installationId, helper)}; fi`;
+}
 async function tree(path: string): Promise<unknown> {
   const stat = await lstat(path);
   const metadata = {
@@ -441,15 +455,7 @@ test("installation is exact, private, stable, idempotent, and preserves unrelate
       assert.deepEqual(handler, {
         type: "command",
         timeout: 1,
-        command: [
-          f.helper,
-          "--installation-id",
-          String(manifest.installationId),
-          "--descriptor",
-          f.paths.descriptorPath,
-        ]
-          .map(quoteHookArgument)
-          .join(" "),
+        command: guardedCommand(f, String(manifest.installationId)),
       });
       assert.equal(
         ownedGroup(installed, event).matcher,
@@ -946,7 +952,7 @@ test("only fixed shell-quoted absolute arguments are emitted, even for hostile-l
     );
     assert.equal(
       handler.command,
-      `${quoteHookArgument(f.helper)} '--installation-id' ${quoteHookArgument(String(manifest.installationId))} '--descriptor' ${quoteHookArgument(f.paths.descriptorPath)}`,
+      `if [ -x ${quoteHookArgument(f.helper)} ]; then exec ${quoteHookArgument(f.helper)} '--installation-id' ${quoteHookArgument(String(manifest.installationId))} '--descriptor' ${quoteHookArgument(f.paths.descriptorPath)}; fi`,
     );
     assert.equal(String(handler.command).includes("$CLAUDE"), false);
     await refused(
@@ -1453,12 +1459,11 @@ test("relocation rewrites owned hooks to a moved helper and keeps unrelated sett
     assert.equal((await json(f.paths.manifestPath)).helperPath, moved);
     const relocated = await json(f.paths.settingsPath);
     assert.equal(JSON.stringify(relocated).includes(f.helper), false);
+    const id = String((await json(f.paths.manifestPath)).installationId);
     for (const event of hookEvents)
       assert.equal(
-        String(ownedHandler(relocated, event).command).startsWith(
-          quoteHookArgument(moved),
-        ),
-        true,
+        ownedHandler(relocated, event).command,
+        guardedCommand(f, id, moved),
       );
     assert.equal(relocated.theme, "kept");
     assert.deepEqual(groups(relocated, "Stop")[0], original.hooks.Stop[0]);
@@ -1482,5 +1487,142 @@ test("relocation never installs without a manifest or toward a missing helper", 
       relocateClaudeHooks(f.paths, join(f.home, "missing", "helper")),
     );
     assert.deepEqual(await tree(f.home), installed);
+  });
+});
+
+async function downgrade(f: Fixture, manifestToo: boolean): Promise<string> {
+  const manifest = await json(f.paths.manifestPath);
+  const id = String(manifest.installationId);
+  const helper = String(manifest.helperPath);
+  const current = await json(f.paths.settingsPath);
+  for (const event of hookEvents)
+    ownedHandler(current, event).command = plainCommand(f, id, helper);
+  await writeFile(f.paths.settingsPath, JSON.stringify(current), {
+    mode: 0o600,
+  });
+  if (manifestToo) {
+    for (const hook of manifest.hooks as JsonObject[])
+      (hook.handler as JsonObject).command = plainCommand(f, id, helper);
+    await writeFile(
+      f.paths.manifestPath,
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      { mode: 0o600 },
+    );
+  }
+  return id;
+}
+
+test("handlers written by older builds are recognized and upgraded in place", async () => {
+  await fixture(async (f) => {
+    const original = {
+      theme: "kept",
+      hooks: {
+        Stop: [{ matcher: "", hooks: [{ type: "command", command: "mine" }] }],
+      },
+    };
+    await settings(f, original);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const id = await downgrade(f, true);
+    const legacy = await json(f.paths.settingsPath);
+    const check = await manageClaudeHooks("check", false, f.paths, f.helper);
+    assert.equal(check.watchling.status, "installed");
+    const preview = await manageClaudeHooks(
+      "install",
+      false,
+      f.paths,
+      f.helper,
+    );
+    assert.equal(preview.watchling.status, "would-install");
+    assert.deepEqual(
+      preview.watchling.diff.map((change) => change.action),
+      hookEvents.map(() => "update"),
+    );
+    assert.deepEqual(await json(f.paths.settingsPath), legacy);
+
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const upgraded = await json(f.paths.settingsPath);
+    for (const event of hookEvents) {
+      assert.deepEqual(
+        groups(upgraded, event),
+        groups(legacy, event).map((group) =>
+          group === ownedGroup(legacy, event)
+            ? {
+                ...group,
+                hooks: [
+                  {
+                    type: "command",
+                    command: guardedCommand(f, id),
+                    timeout: 1,
+                  },
+                ],
+              }
+            : group,
+        ),
+      );
+    }
+    const manifest = await json(f.paths.manifestPath);
+    assert.equal(manifest.installationId, id);
+    for (const hook of manifest.hooks as JsonObject[])
+      assert.equal((hook.handler as JsonObject).command, guardedCommand(f, id));
+    const before = await tree(f.home);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    assert.deepEqual(await tree(f.home), before);
+    await manageClaudeHooks("uninstall", true, f.paths, f.helper);
+    assert.deepEqual(await json(f.paths.settingsPath), original);
+  });
+});
+
+test("legacy handlers under a current manifest still uninstall and relocate", async () => {
+  await fixture(async (f) => {
+    await settings(f, { theme: "kept" });
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    await downgrade(f, false);
+    const moved = join(f.home, "Applications", "watchling-hook-emitter");
+    await mkdir(dirname(moved), { mode: 0o700 });
+    await writeFile(moved, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    assert.equal(
+      (await relocateClaudeHooks(f.paths, moved))?.watchling.status,
+      "installed",
+    );
+    const id = String((await json(f.paths.manifestPath)).installationId);
+    const relocated = await json(f.paths.settingsPath);
+    for (const event of hookEvents)
+      assert.equal(
+        ownedHandler(relocated, event).command,
+        guardedCommand(f, id, moved),
+      );
+    await downgrade(f, true);
+    await manageClaudeHooks("uninstall", true, f.paths, moved);
+    assert.deepEqual(await json(f.paths.settingsPath), { theme: "kept" });
+    await assert.rejects(lstat(f.paths.manifestPath), { code: "ENOENT" });
+  });
+});
+
+test("the installed command exits quietly when the helper is gone and runs it otherwise", async () => {
+  await fixture(async (f) => {
+    const marker = join(f.home, "ran");
+    await writeFile(
+      f.helper,
+      `#!/bin/sh\nprintf '%s ' "$@" > ${quoteHookArgument(marker)}\nexit 3\n`,
+      { mode: 0o700 },
+    );
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const command = String(
+      ownedHandler(await json(f.paths.settingsPath), "Stop").command,
+    );
+    const run = () =>
+      spawnSync("/bin/sh", ["-c", command], {
+        input: "{}",
+        encoding: "utf8",
+        env: { PATH: "/usr/bin:/bin", HOME: f.home },
+      });
+    const present = run();
+    assert.equal(present.status, 3);
+    assert.match(await readFile(marker, "utf8"), /^--installation-id /);
+    await unlink(f.helper);
+    const missing = run();
+    assert.equal(missing.status, 0);
+    assert.equal(missing.stdout, "");
+    assert.equal(missing.stderr, "");
   });
 });

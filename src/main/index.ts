@@ -1,12 +1,9 @@
-import { app, protocol } from "electron";
+import { app, Notification, protocol } from "electron";
 import { join } from "node:path";
-import { isInstalledAppLocation, resolveAppPaths } from "./app-paths.ts";
+import { resolveAppPaths } from "./app-paths.ts";
 import { runHookCommand } from "./hook-command.ts";
 import { runDesktop } from "./desktop.ts";
-import {
-  HookManagementError,
-  relocateClaudeHooks,
-} from "../integration/claude/hook-install.ts";
+import { canAutoConnect, ClaudeConnection } from "./connection.ts";
 
 app.setName("watchling");
 const args = process.argv.slice(process.defaultApp ? 2 : 1);
@@ -31,13 +28,20 @@ if (args[0] === "hooks") {
       privileges: { standard: true, secure: true, supportFetchAPI: true },
     },
   ]);
-  await runDesktop(paths.userData);
-  if (app.hasSingleInstanceLock() && isInstalledAppLocation(process.execPath))
-    relocateClaudeHooks(paths, helperPath).catch((error: unknown) =>
-      console.error(
-        error instanceof HookManagementError
-          ? `Claude hook relocation failed: ${error.message}`
-          : "Claude hook relocation failed",
-      ),
-    );
+  await runDesktop(
+    paths.userData,
+    {},
+    new ClaudeConnection({
+      paths,
+      helperPath,
+      available: canAutoConnect(app.isPackaged, process.execPath),
+      notify: () => {
+        if (!Notification.isSupported()) return;
+        new Notification({
+          title: "Watchling is connected to Claude Code",
+          body: "You can turn this off from the Watchling menu bar icon.",
+        }).show();
+      },
+    }),
+  );
 }

@@ -14,7 +14,11 @@ The app is ad-hoc signed and not notarized. If macOS refuses the first launch, r
 
 ## Claude Code hooks
 
-Watchling learns about sessions through hooks in `~/.claude/settings.json`. Nothing is changed until you ask:
+Watchling learns about sessions through hooks in `~/.claude/settings.json`. When you launch it from `/Applications` or `~/Applications`, it connects itself: it adds its hooks if they are missing and leaves the file alone if they are already there. The first time it does this, macOS shows a notification. A copy run from the DMG, an App Translocation path or a development build never touches the file.
+
+To disconnect, turn off **Connected to Claude Code** in the menu bar icon's menu. That removes Watchling's hooks and remembers the choice, so later launches leave them out. Turn it back on to reconnect.
+
+The CLI still works for checking, previewing or managing the hooks yourself:
 
 ```sh
 /Applications/Watchling.app/Contents/MacOS/Watchling hooks check
@@ -25,7 +29,7 @@ Watchling learns about sessions through hooks in `~/.claude/settings.json`. Noth
 
 Install adds only Watchling's own handlers and keeps the rest of the file. Uninstall removes exactly those handlers. A backup of the previous settings is kept in `~/Library/Application Support/watchling/hook-backups`.
 
-If hooks were installed from another copy of the app, launching Watchling from `/Applications` or `~/Applications` moves them to the new helper path. It never installs hooks you have not installed before.
+Each handler checks that the helper still exists before running it, so if you delete Watchling without disconnecting, Claude Code keeps working and the hooks do nothing. If hooks were installed from another copy of the app, launching Watchling from `/Applications` or `~/Applications` moves them to the new helper path. Hooks written by older builds are upgraded in place.
 
 ## States
 
@@ -44,7 +48,7 @@ The pet shows the most urgent state across sessions: `asking`, `unknown`, `worki
 | `pnpm typecheck`        | Type-check the project                                                                                                                                                                |
 | `pnpm test:unit`        | Unit tests                                                                                                                                                                            |
 | `pnpm test:integration` | Hook helper integration tests                                                                                                                                                         |
-| `pnpm test:packaged`    | Package, then test the hooks CLI and relocation in a temp HOME                                                                                                                        |
+| `pnpm test:packaged`    | Package, then test the hooks CLI, auto-connect and relocation in a temp HOME                                                                                                          |
 | `pnpm test:e2e`         | Playwright window tests                                                                                                                                                               |
 | `pnpm format`           | Format with Prettier                                                                                                                                                                  |
 

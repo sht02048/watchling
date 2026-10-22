@@ -4,6 +4,7 @@ import {
   clipboard,
   Menu,
   nativeImage,
+  type MenuItemConstructorOptions,
   protocol,
   screen,
   session,
@@ -27,6 +28,7 @@ import {
 import { attachIpc } from "./ipc.ts";
 import { clampWindow, expand, listPosition } from "./geometry.ts";
 import { PositionStore } from "./position-store.ts";
+import type { ClaudeConnection } from "./connection.ts";
 import type { TransportReceipt } from "../integration/claude/protocol.ts";
 import {
   createSnapshotPublisher,
@@ -64,6 +66,13 @@ let timer: ReturnType<typeof setInterval> | undefined;
 let dragTimer: ReturnType<typeof setInterval> | undefined;
 let detachIpc: (() => void) | undefined;
 let store: PositionStore | undefined;
+let connection:
+  | Pick<
+      ClaudeConnection,
+      "available" | "start" | "isConnected" | "setConnected"
+    >
+  | undefined;
+let connected = false;
 let collector: Awaited<ReturnType<typeof startCollector>> | undefined;
 let publisher: ReturnType<typeof createSnapshotPublisher> | undefined;
 let quitting = false;
@@ -138,6 +147,41 @@ function endDrag(): void {
   }
   dragging = undefined;
   updateInput();
+}
+
+function updateMenu(): void {
+  if (!tray || tray.isDestroyed()) return;
+  const item: MenuItemConstructorOptions = connection?.available
+    ? {
+        label: "Connected to Claude Code",
+        type: "checkbox",
+        checked: connected,
+        click: (menuItem) => void toggleConnection(menuItem.checked),
+      }
+    : {
+        label: "Move Watchling to Applications to connect Claude Code",
+        enabled: false,
+      };
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Show pet", click: showPet },
+      { label: "Hide pet", click: hidePet },
+      { type: "separator" },
+      item,
+      { type: "separator" },
+      { label: "Quit", click: () => app.quit() },
+    ]),
+  );
+}
+
+async function refreshConnection(): Promise<void> {
+  connected = (await connection?.isConnected()) ?? false;
+  updateMenu();
+}
+
+async function toggleConnection(value: boolean): Promise<void> {
+  await connection?.setConnected(value);
+  await refreshConnection();
 }
 
 function hideList(): void {
@@ -335,14 +379,8 @@ async function start(options: DesktopOptions): Promise<void> {
   icon.setTemplateImage(true);
   tray = new Tray(icon);
   updateTray();
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Show pet", click: showPet },
-      { label: "Hide pet", click: hidePet },
-      { type: "separator" },
-      { label: "Quit", click: () => app.quit() },
-    ]),
-  );
+  updateMenu();
+  if (connection?.available) void connection.start().then(refreshConnection);
   publisher = createSnapshotPublisher({
     getSnapshot: () => {
       const finishTrace = options.trace?.("snapshot.materialize");
@@ -444,7 +482,9 @@ async function start(options: DesktopOptions): Promise<void> {
 export async function runDesktop(
   userData: string,
   options: DesktopOptions = {},
+  claude?: typeof connection,
 ): Promise<void> {
+  connection = claude;
   await mkdir(userData, { recursive: true, mode: 0o700 });
   app.setPath("userData", userData);
   app.on("window-all-closed", () => {
