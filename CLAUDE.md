@@ -13,8 +13,10 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 | `pnpm test:e2e tests/e2e/window.test.ts` | Playwright against Electron with a temporary `HOME` |
 | `pnpm test:packaged` | Builds the app and checks hook install/relocation in packaged form |
 | `pnpm package` | Fused, ad-hoc signed app in `build/release/Watchling-darwin-arm64/`; also refreshes `.vite/` for `electron .` |
-| `pnpm make` | `package` plus the DMG in `build/release/make/dmg/arm64/` and the unfused app for Playwright in `build/unfused/` |
+| `pnpm make` | `package` plus `build/release/make/dmg/arm64/Watchling.dmg` and the unfused app for Playwright in `build/unfused/` |
 | `pnpm release` | Builds the DMG and uploads it to a draft GitHub release of `sht02048/watchling`. Needs `GITHUB_TOKEN`; publishes outside the machine, so run only when asked. |
+
+Releases normally come from `.github/workflows/release.yml`: set `version` in `package.json`, commit, then push a matching tag (`git tag v0.1.0 && git push origin v0.1.0`). It lints, type-checks, runs the unit and integration tests, builds the DMG on a macOS arm64 runner and publishes a GitHub release with `Watchling.dmg`; tags with a `-` suffix become prereleases. The site's download buttons point at `releases/latest/download/Watchling.dmg`, so keep that file name. Pushing a tag publishes outside the machine, so do it only when asked.
 | `pnpm playground` | Browser labs for pet states, companions and the asking cue at http://127.0.0.1:5178/ |
 | `pnpm lint` / `pnpm lint:fix` | oxlint (`.oxlintrc.json`) |
 | `pnpm format` / `pnpm format:check` | oxfmt (`.oxfmtrc.json`); Markdown is left unformatted |

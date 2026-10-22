@@ -39,7 +39,8 @@ const config: ForgeConfig = {
     extendInfo: { LSUIElement: true },
     extraResource: [join(helperStage, "helpers")],
   },
-  makers: [new MakerDMG({}, ["darwin"])],
+  // A fixed name keeps releases/latest/download/Watchling.dmg pointing at the newest build.
+  makers: [new MakerDMG({ name: "Watchling" }, ["darwin"])],
   publishers: [
     new PublisherGitHub({
       repository: { owner: "sht02048", name: "watchling" },

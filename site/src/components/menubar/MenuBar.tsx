@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { RELEASES } from "@/app/links.ts";
+import { DOWNLOAD } from "@/app/links.ts";
 import { Glyph } from "@/components/icons/Glyph.tsx";
 import styles from "./MenuBar.module.css";
 
@@ -103,7 +103,7 @@ function AppMenu({
           Show Sessions
         </button>
         <div className={styles.separator} role="separator" />
-        <a className={styles.dropdownItem} href={RELEASES} role="menuitem">
+        <a className={styles.dropdownItem} href={DOWNLOAD} role="menuitem">
           Download Watchling…
         </a>
       </div>
@@ -158,7 +158,7 @@ export function MenuBar({
         >
           <Glyph name="peep" className={styles.trayIcon} />
         </button>
-        <a className={clsx(styles.item, styles.strong)} href={RELEASES}>
+        <a className={clsx(styles.item, styles.strong)} href={DOWNLOAD}>
           Download
         </a>
         <Clock />

@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import type { RefObject } from "react";
 import iconUrl from "@resources/icon.svg?url";
-import { RELEASES } from "@/app/links.ts";
+import { DOWNLOAD } from "@/app/links.ts";
 import { Glyph } from "@/components/icons/Glyph.tsx";
 import styles from "./Dock.module.css";
 
@@ -23,7 +23,7 @@ export function Dock({
         <Glyph name="terminal" className={styles.terminalIcon} />
         <span className={styles.label}>Terminal</span>
       </button>
-      <a className={styles.app} href={RELEASES} aria-label="Download Watchling">
+      <a className={styles.app} href={DOWNLOAD} aria-label="Download Watchling">
         <img src={iconUrl} alt="" width={52} height={52} draggable={false} />
         <span className={styles.label}>Download Watchling</span>
       </a>
