@@ -30,6 +30,7 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 - `src/shared/ui-contract.ts` — snapshot types, state labels and the preload bridge contract.
 - `src/renderer/pet/` — canvas pet, companions and the asking speech bubble. `src/renderer/sessions/` — the session list.
 - `src/playground/` — design labs; their saved JSON configs feed the real renderer.
+- `site/` — the landing page: React and CSS Modules on Vite, deployed on Vercel (`site/vercel.json`). It imports the pet renderer from `src/` through the `@watchling/` alias. `pnpm site:dev` serves it; its tunable values live in `site/src/config/config.json`.
 - `native/hook-emitter/` — Swift helper that Claude Code runs for each hook event.
 - `docs/` — design decisions: `state-model.md`, `session-list.md`, `claude-coverage.md`, `landing-page.md`.
 

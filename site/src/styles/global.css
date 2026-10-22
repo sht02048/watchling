@@ -1,0 +1,64 @@
+:root {
+  --sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI",
+    Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --text-micro: 11px;
+  --text-caption: 12px;
+  --text-ui: 13px;
+  --text-code: 14px;
+  --z-wall: 0;
+  --z-widget: 1;
+  --z-pet: 1000;
+  --z-chrome: 2;
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  overflow: hidden;
+  background: #1d1f25;
+}
+[hidden] {
+  display: none !important;
+}
+button,
+a {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 719px) {
+  body {
+    overflow: auto;
+  }
+  body:has([data-mode="real"]) {
+    background: oklch(77% 0.075 245);
+  }
+  body:has([data-mode="toy"]) {
+    background: #f7dcc8;
+  }
+}

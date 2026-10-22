@@ -5,7 +5,7 @@ Decided from a prototype that compared four layouts for the `site/` landing page
 ## Decision: Split, with Peep under the state list
 
 - **Left column:** a readable headline ("A desktop pet for Claude Code") with a one-line subhead, then the "Peep's states" list, then Peep. The column is `min(440px, 30vw)` wide.
-- **Peep:** sits right below the state list, right-aligned so its body's right edge lines up with the list's right edge, on the side facing the terminal. Its size is the `peepSize` knob (default 210px). Peep shrinks, down to 140px, when the column runs out of height. Companions and the asking "!" are drawn above the list. Peep stays draggable.
+- **Peep:** sits right below the state list, right-aligned so its body's right edge lines up with the list's right edge, on the side facing the terminal. Its size is `peepSize` in `site/src/config/config.json` (default 210px). Peep shrinks, down to 140px, when the column runs out of height. Companions and the asking "!" are drawn above the list. Peep stays draggable.
 - **Terminal:** `max(56px, 5vw)` to the right of the column. Its width is `min(980px, viewport − column − gap − max(32px, 6vw) − max(32px, 4vw))`, and its height is `max(300px, area − 104px − (peepSize × 0.82 + 2px))`. These are the sizes from the prototype.
 - **Centring:** the column, the gap and the terminal are centred together as one group in the viewport. The column and the terminal are each centred vertically between the menu bar and the top of the Dock, so the group is centred too.
 - **Sessions window:** opens under the state list, to the left of Peep. It narrows to between 240 and 312px so it doesn't cover Peep, and it never covers the terminal.
@@ -26,7 +26,7 @@ The visitor changes Peep's state only by choosing in the terminal, or with the m
 - **After each flow:** a short wrap-up line and a Peep line explaining Peep's state, then the menu again. This repeats without end.
 - **Peep lines:** wrapped lines hang-indent so they line up with the message, not under the "Peep" label.
 - **Progress:** the "Peep's states" list tracks which states have been found, and its hints name the option that shows each state. The menu itself carries no marks.
-- **Timings:** the lab knobs `typeSpeed` and `agentDurations`; a task lasts about 5 seconds. With reduced motion, lines appear at once.
+- **Timings:** `typeSpeed` and `agentDurations` in `site/src/config/config.json`; a task lasts about 5 seconds. With reduced motion, lines appear at once.
 
 ## Rejected
 

@@ -1,0 +1,140 @@
+.desktop {
+  --hue: 215;
+  --peep-size: 210px;
+  --focus: #1f2329;
+  --accent: #d97757;
+  --accent-ink: #1c1210;
+  --ask: #b794f6;
+  --ask-ink: #1d1430;
+  --ok: #6cc28a;
+  --wall: linear-gradient(#cfd8e8, #9fb3d1);
+  --wall-ink: rgb(255 255 255 / 0.5);
+  --ink: #1f2329;
+  --muted: #5e6470;
+  --faint: #8a909b;
+  --surface: #fbfbfa;
+  --surface-sunken: rgb(31 35 41 / 0.05);
+  --row-current: rgb(31 35 41 / 0.06);
+  --ring: rgb(0 0 0 / 0.08);
+  --elevation-raised:
+    0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.06),
+    0 6px 16px -6px rgb(17 24 39 / 0.18);
+  --elevation-window:
+    0 0 0 0.5px rgb(0 0 0 / 0.24), 0 2px 6px rgb(0 0 0 / 0.08),
+    0 24px 56px -16px rgb(17 24 39 / 0.42);
+  --menubar-bg: rgb(246 246 248 / 0.66);
+  --menubar-ink: #1d1d1f;
+  --menu-bg: rgb(246 246 248 / 0.9);
+  --menu-hover: #2f6fed;
+  --dock-bg: rgb(255 255 255 / 0.36);
+  --window-radius: 12px;
+  --titlebar-bg: #2a2b30;
+  --title-ink: #a9acb4;
+  --term-bg: #1e1f23;
+  --term-ink: #e7e7e9;
+  --term-muted: #8d919a;
+  --term-edge: rgb(255 255 255 / 0.16);
+  --sessions-title-bg: #ecebe7;
+  --needs: #6a3fc7;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 28px minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--wall);
+  color: var(--ink);
+}
+.desktop[data-mode="real"] {
+  --wall: linear-gradient(
+    168deg,
+    oklch(92% 0.035 var(--hue)) 0%,
+    oklch(88.5% 0.05 calc(var(--hue) + 8)) 30%,
+    oklch(83% 0.065 calc(var(--hue) + 18)) 62%,
+    oklch(77% 0.075 calc(var(--hue) + 30)) 100%
+  );
+}
+.desktop[data-mode="toy"] {
+  --accent: #e47a6a;
+  --ask: #b98be8;
+  --focus: #5a3a32;
+  --wall: linear-gradient(#fff6ec 0%, #fdeee0 35%, #fae4d3 68%, #f7dcc8 100%);
+  --wall-ink: rgb(228 122 106 / 0.18);
+  --ink: #4f332c;
+  --muted: #86655b;
+  --faint: #ad8f85;
+  --surface: #fffaf5;
+  --surface-sunken: rgb(228 122 106 / 0.07);
+  --row-current: rgb(228 122 106 / 0.1);
+  --elevation-raised:
+    0 0 0 1px rgb(228 122 106 / 0.16), 0 1px 3px rgb(160 80 60 / 0.06),
+    0 8px 18px -8px rgb(228 122 106 / 0.3);
+  --elevation-window:
+    0 0 0 1px rgb(228 122 106 / 0.2), 0 2px 6px rgb(160 80 60 / 0.06),
+    0 24px 48px -18px rgb(228 122 106 / 0.45);
+  --menubar-bg: rgb(255 246 236 / 0.8);
+  --menubar-ink: #5a3a32;
+  --menu-bg: rgb(255 248 241 / 0.96);
+  --menu-hover: #e47a6a;
+  --dock-bg: rgb(255 241 230 / 0.7);
+  --window-radius: 20px;
+  --titlebar-bg: #fff1e6;
+  --title-ink: #9a6455;
+  --term-bg: #3a2b28;
+  --term-ink: #fbe9dc;
+  --term-muted: #c49d8f;
+  --term-edge: rgb(246 165 137 / 0.35);
+  --sessions-title-bg: #fff1e6;
+}
+.desktop[data-mode="dev"] {
+  --focus: #ffffff;
+  --wall: linear-gradient(
+    168deg,
+    oklch(21% 0.025 var(--hue)) 0%,
+    oklch(17% 0.015 var(--hue)) 55%,
+    oklch(15% 0.01 var(--hue)) 100%
+  );
+  --wall-ink: rgb(255 255 255 / 0.07);
+  --ink: #e4e6eb;
+  --muted: #9aa0ac;
+  --faint: #6e7480;
+  --surface: #181b21;
+  --surface-sunken: rgb(255 255 255 / 0.04);
+  --row-current: rgb(255 255 255 / 0.07);
+  --ring: #2a2e36;
+  --elevation-raised: 0 0 0 1px rgb(255 255 255 / 0.09);
+  --elevation-window:
+    0 0 0 1px rgb(255 255 255 / 0.1), 0 24px 56px -16px rgb(0 0 0 / 0.7);
+  --menubar-bg: rgb(18 20 25 / 0.82);
+  --menubar-ink: #d6d9e0;
+  --menu-bg: rgb(28 31 38 / 0.97);
+  --menu-hover: #3b5bdb;
+  --dock-bg: rgb(30 33 41 / 0.72);
+  --window-radius: 10px;
+  --titlebar-bg: #171a20;
+  --title-ink: #8a90a0;
+  --term-bg: #0c0e11;
+  --sessions-title-bg: #1f232b;
+  --needs: #b79cf5;
+}
+
+.screen {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+@media (max-width: 719px) {
+  .desktop {
+    position: static;
+    display: block;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .screen {
+    display: flex;
+    flex-direction: column;
+    padding: 20px 16px calc(32px + env(safe-area-inset-bottom));
+    overflow: visible;
+  }
+}

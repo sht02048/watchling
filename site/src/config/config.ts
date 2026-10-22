@@ -9,9 +9,9 @@ export interface Config {
   wallpaperHue: number;
 }
 
-export type NumberKnob = Exclude<keyof Config, "mode" | "agentDurations">;
+type NumberKnob = Exclude<keyof Config, "mode" | "agentDurations">;
 
-export const ranges: Record<
+const ranges: Record<
   NumberKnob | "agentDuration",
   { min: number; max: number; step: number }
 > = {
@@ -46,11 +46,4 @@ export function validateConfig(value: unknown): Config | null {
       .filter((key) => key !== "agentDuration")
       .every((key) => inRange(config[key], key));
   return valid ? (config as unknown as Config) : null;
-}
-
-export function formatConfig(config: Config): string {
-  return `${JSON.stringify(config, null, 2).replace(
-    /\[\s+([^\]]*?)\s+\]/g,
-    (_, items: string) => `[${items.split(/,\s+/).join(", ")}]`,
-  )}\n`;
 }

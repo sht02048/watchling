@@ -1,0 +1,158 @@
+.menubar {
+  position: relative;
+  z-index: var(--z-chrome);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  background: var(--menubar-bg);
+  backdrop-filter: blur(24px) saturate(1.6);
+  color: var(--menubar-ink);
+  font-size: var(--text-ui);
+  white-space: nowrap;
+}
+.side {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.glyph {
+  width: 14px;
+  height: 14px;
+  margin: 0 8px 0 8px;
+  fill: currentColor;
+}
+.item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: default;
+}
+button.item::before,
+a.item::before {
+  content: "";
+  position: absolute;
+  inset: -3px 0;
+}
+button.item,
+a.item {
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+.item.open {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+@media (hover: hover) and (pointer: fine) {
+  button.item:hover,
+  a.item:hover {
+    background: color-mix(in srgb, currentColor 14%, transparent);
+  }
+}
+.strong {
+  font-weight: 600;
+}
+.trayIcon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+.clock {
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+.appMenu {
+  position: relative;
+}
+.dropdown {
+  position: absolute;
+  top: 25px;
+  left: 0;
+  display: grid;
+  min-width: 240px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--menu-bg);
+  backdrop-filter: blur(24px);
+  box-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.2),
+    0 2px 6px rgb(0 0 0 / 0.08),
+    0 14px 32px -8px rgb(0 0 0 / 0.3);
+  color: var(--menubar-ink);
+  animation: menu-in 140ms var(--ease-out);
+  transform-origin: top left;
+}
+.dropdownItem {
+  position: relative;
+  display: block;
+  height: 24px;
+  padding: 0 10px 0 24px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 24px;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.dropdownItem:hover,
+.dropdownItem:focus-visible {
+  outline: none;
+  background: var(--menu-hover);
+  color: #fff;
+}
+.tick {
+  position: absolute;
+  left: 8px;
+  visibility: hidden;
+}
+[aria-checked="true"] > .tick {
+  visibility: visible;
+}
+.separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (max-width: 1100px) {
+  .inert {
+    display: none;
+  }
+}
+
+@media (max-width: 719px) {
+  .menubar {
+    position: sticky;
+    top: 0;
+    height: 44px;
+  }
+  .clock,
+  .glyph {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dropdown {
+    animation: none;
+  }
+}

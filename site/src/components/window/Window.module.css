@@ -1,0 +1,76 @@
+.window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--window-radius);
+  box-shadow: var(--elevation-window);
+}
+.titlebar {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--titlebar-bg);
+  color: var(--title-ink);
+  font-size: var(--text-ui);
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.window[data-dragging] .titlebar {
+  cursor: grabbing;
+}
+.lights {
+  position: absolute;
+  left: 13px;
+  display: flex;
+  gap: 8px;
+}
+.light {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.18);
+}
+.light.minimize {
+  background: #febc2e;
+}
+.light.zoom {
+  background: #28c840;
+}
+button.light {
+  cursor: pointer;
+}
+button.light::before {
+  content: "";
+  position: absolute;
+  inset: -8px -4px;
+}
+.title {
+  overflow: hidden;
+  padding: 0 68px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 719px) {
+  .window {
+    position: relative;
+    width: auto;
+    max-height: none;
+  }
+}

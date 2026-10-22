@@ -4,7 +4,7 @@ import {
   type SessionDetail,
   type SessionSummary,
   type Snapshot,
-} from "../../src/shared/ui-contract.ts";
+} from "@watchling/shared/ui-contract.ts";
 
 export const choices = [
   { id: "work", label: "Work on a task", state: "working" },
