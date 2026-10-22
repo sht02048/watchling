@@ -27,11 +27,9 @@ export class PositionStore {
         return { x: Math.round(value.x), y: Math.round(value.y) };
       console.warn("Position restore skipped: invalid coordinates");
     } catch (error) {
-      if (!(
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      )) {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      ) {
         console.warn("Position restore skipped: unreadable data");
       }
     }

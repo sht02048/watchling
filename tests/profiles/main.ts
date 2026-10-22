@@ -651,7 +651,7 @@ Object.defineProperty(globalThis, "__watchlingTransportProfile", {
   value: api,
 });
 
-await runDesktop(resolveAppPaths(home).userData, {
+void runDesktop(resolveAppPaths(home).userData, {
   trace: trace.begin,
   scheduleDrain,
   onTransportReceipt: recordReceipt,

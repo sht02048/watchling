@@ -568,7 +568,8 @@ export type UdsWorkerMessage =
     }
   | { type: "failed"; error: string };
 export type UdsCommand =
-  { type: "start"; startNs: string } | { type: "cancel" };
+  | { type: "start"; startNs: string }
+  | { type: "cancel" };
 export type UdsReport = LaneReport<WireResult> & {
   trace: TraceReport;
   execution: {

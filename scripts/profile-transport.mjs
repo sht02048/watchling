@@ -1,8 +1,57 @@
-import { build, stop } from "esbuild";
+import { build } from "vite";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, writeFile, cp, rm } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  writeFile,
+  cp,
+  rm,
+} from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+
+const profileRoot = resolve(".vite/profile");
+const define = {
+  PET_VITE_DEV_SERVER_URL: "undefined",
+  SESSIONS_VITE_DEV_SERVER_URL: "undefined",
+};
+
+function bundleNode(entry, fileName, format, bundleDependencies) {
+  return build({
+    configFile: false,
+    logLevel: "warn",
+    define,
+    ssr: bundleDependencies ? { noExternal: true } : {},
+    build: {
+      ssr: entry,
+      outDir: join(profileRoot, "build"),
+      emptyOutDir: false,
+      minify: false,
+      target: "node24",
+      rollupOptions: {
+        external: ["electron"],
+        output: { format, entryFileNames: fileName },
+      },
+    },
+  });
+}
+
+function bundleRenderer(name, plugins = []) {
+  return build({
+    configFile: false,
+    logLevel: "warn",
+    root: resolve("src/renderer", name),
+    base: "./",
+    plugins,
+    build: {
+      outDir: join(profileRoot, "renderer", name),
+      emptyOutDir: true,
+      assetsInlineLimit: 0,
+    },
+  });
+}
 
 // Full contract: node scripts/profile-transport.mjs
 // Debug selection (still three fresh runs): --profile N or --profile O
@@ -46,7 +95,7 @@ process.once("SIGTERM", interruptBuild);
 try {
   // The public CLI and helper MUST come from this freshly built local package.
   await new Promise((done, reject) => {
-    buildProcess = spawn("npm", ["run", "build:local-app"], {
+    buildProcess = spawn("npm", ["run", "make"], {
       stdio: "inherit",
       detached: true,
     });
@@ -93,10 +142,14 @@ try {
     );
     await rm(diagnosticApp, { recursive: true, force: true });
     checkInterrupted();
-    await cp(resolve("build/unfused/mac-arm64/Watchling.app"), diagnosticApp, {
-      recursive: true,
-      verbatimSymlinks: true,
-    });
+    await cp(
+      resolve("build/unfused/Watchling-darwin-arm64/Watchling.app"),
+      diagnosticApp,
+      {
+        recursive: true,
+        verbatimSymlinks: true,
+      },
+    );
     checkInterrupted();
     await cp(
       manifest.binaryPath,
@@ -107,60 +160,51 @@ try {
     );
     checkInterrupted();
   }
-  await build({
-    entryPoints: ["tests/profiles/main.ts"],
-    outfile: "dist/main/profile.js",
-    bundle: true,
-    platform: "node",
-    format: "esm",
-    external: ["electron"],
-    target: "node24",
-  });
+  await rm(profileRoot, { recursive: true, force: true });
+  await bundleNode("tests/profiles/main.ts", "profile.cjs", "cjs", true);
+  checkInterrupted();
+  await bundleNode("src/preload/index.ts", "preload.cjs", "cjs", true);
   checkInterrupted();
   // Fixture-only access to the existing render closure, not a new product IPC
   // endpoint or a synthetic echo renderer. The already packaged app is untouched.
-  const rendererPath = resolve("src/renderer/pet/index.ts");
-  const renderer = await readFile(rendererPath, "utf8");
-  checkInterrupted();
-  await build({
-    stdin: {
-      contents:
-        renderer +
-        '\nObject.defineProperty(window, "__watchlingProfileRender", { value: render });\n',
-      resolveDir: dirname(rendererPath),
-      sourcefile: rendererPath,
-      loader: "ts",
+  const rendererPath = await realpath("src/renderer/pet/index.ts");
+  let exposed = false;
+  await bundleRenderer("pet", [
+    {
+      name: "watchling-profile-render",
+      transform(code, id) {
+        if (id.split("?")[0] !== rendererPath) return undefined;
+        exposed = true;
+        return (
+          code +
+          '\nObject.defineProperty(window, "__watchlingProfileRender", { value: render });\n'
+        );
+      },
+      buildEnd() {
+        if (!exposed)
+          throw new Error("Profile render hook was not applied to the pet");
+      },
     },
-    outfile: "dist/renderer/pet/index.js",
-    bundle: true,
-    platform: "browser",
-    format: "esm",
-    target: "chrome140",
-  });
+  ]);
   checkInterrupted();
-  await build({
-    entryPoints: ["tests/profiles/uds-worker.ts"],
-    outfile: "dist/main/profile-uds-worker.mjs",
-    bundle: true,
-    platform: "node",
-    format: "esm",
-    target: "node24",
-  });
+  await bundleRenderer("sessions");
   checkInterrupted();
-  await build({
-    entryPoints: ["tests/profiles/transport.ts"],
-    outfile: "dist/main/profile-driver.mjs",
-    bundle: true,
-    platform: "node",
-    format: "esm",
-    packages: "external",
-    external: ["electron"],
-    target: "node24",
-  });
+  await bundleNode(
+    "tests/profiles/uds-worker.ts",
+    "profile-uds-worker.mjs",
+    "es",
+    true,
+  );
   checkInterrupted();
-  stop();
+  await bundleNode(
+    "tests/profiles/transport.ts",
+    "profile-driver.mjs",
+    "es",
+    false,
+  );
+  checkInterrupted();
   const { runProfiles } = await import(
-    pathToFileURL(resolve("dist/main/profile-driver.mjs")).href
+    pathToFileURL(join(profileRoot, "build", "profile-driver.mjs")).href
   );
   checkInterrupted();
   process.removeListener("SIGINT", interruptBuild);
@@ -189,7 +233,6 @@ try {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 } finally {
-  stop();
   process.removeListener("SIGINT", interruptBuild);
   process.removeListener("SIGTERM", interruptBuild);
 }

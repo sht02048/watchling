@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "builtin": true
+  },
+  "rules": {
+    "no-control-regex": "off"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**", "scripts/**"],
+      "rules": {
+        "no-empty-pattern": "off",
+        "no-unsafe-finally": "off"
+      }
+    }
+  ]
+}
