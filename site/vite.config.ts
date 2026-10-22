@@ -48,7 +48,6 @@ function labSave(): Plugin {
 }
 
 export default defineConfig(({ command }) => ({
-  base: command === "build" ? "/watchling/" : "/",
   server: { fs: { allow: [repo] } },
   build:
     command === "build"

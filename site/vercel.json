@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "pnpm install --frozen-lockfile --ignore-scripts --filter watchling-site",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ../src/renderer/pet ../src/shared ../resources/icon.svg ../pnpm-lock.yaml"
+}
