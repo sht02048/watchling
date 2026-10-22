@@ -185,7 +185,7 @@ async function stopChildren(): Promise<void> {
 async function readEndpoint(path: string): Promise<Endpoint> {
   const endpoint = JSON.parse(await readFile(path, "utf8")) as Endpoint;
   const directory = dirname(endpoint.socketPath);
-  const prefix = join(tmpdir(), `pagent-${process.getuid!()}-`);
+  const prefix = join(tmpdir(), `watchling-${process.getuid!()}-`);
   if (
     endpoint.version !== 1 ||
     !isEpoch(endpoint.epoch) ||
@@ -263,7 +263,7 @@ function environment(home: string): Record<string, string> {
   );
   delete env.ELECTRON_RUN_AS_NODE;
   env.HOME = home;
-  env.PAGENT_PROFILE_HOME = home;
+  env.WATCHLING_PROFILE_HOME = home;
   env.XDG_CONFIG_HOME = join(home, ".config");
   return env;
 }
@@ -637,7 +637,7 @@ async function send(bytes: Buffer, path: string): Promise<WireResult> {
 
 async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
   const directory = await mkdtemp(
-    join(tmpdir(), `pagent-${process.getuid!()}-`),
+    join(tmpdir(), `watchling-${process.getuid!()}-`),
   );
   const socketPath = join(directory, "socket");
   if (Buffer.byteLength(socketPath) >= 104) {
@@ -819,7 +819,7 @@ function installRendererSampler(options: {
   startUnixMs: number;
   durationMs: number;
 }): void {
-  const candidate = Reflect.get(window, "__pagentProfileRender") as
+  const candidate = Reflect.get(window, "__watchlingProfileRender") as
     ((snapshot: Snapshot) => void) | undefined;
   if (typeof candidate !== "function")
     throw new Error(
@@ -874,7 +874,7 @@ function installRendererSampler(options: {
         entry.outcome = "timeout";
         entry.latencyMs = performance.now() - dispatched;
       }, 1000);
-      void window.pagent
+      void window.watchling
         .getSnapshot()
         .then((snapshot) => {
           if (stopped) return;
@@ -889,7 +889,7 @@ function installRendererSampler(options: {
             entry.latencyMs = performance.now() - dispatched;
             entry.outcome = canvas
               ?.getAttribute("aria-label")
-              ?.includes(`pagent ${snapshot.state}.`)
+              ?.includes(`Peep ${snapshot.state}.`)
               ? "ok"
               : "error";
             if (entry.outcome === "error")
@@ -932,7 +932,9 @@ function installRendererSampler(options: {
     }
     return samples;
   };
-  Object.defineProperty(window, "__pagentProfileRenderer", { value: { stop } });
+  Object.defineProperty(window, "__watchlingProfileRenderer", {
+    value: { stop },
+  });
   window.addEventListener("pagehide", stop, { once: true });
   schedule();
 }
@@ -974,7 +976,7 @@ async function unresponsivePeer(
   original: Endpoint,
 ) {
   const directory = await mkdtemp(
-    join(tmpdir(), `pagent-${process.getuid!()}-`),
+    join(tmpdir(), `watchling-${process.getuid!()}-`),
   );
   const path = join(directory, "socket");
   const live = new Set<Socket>();
@@ -1620,7 +1622,7 @@ async function runOne(
   executable: string,
   helperPath: string,
 ) {
-  const home = await mkdtemp(join(tmpdir(), "pagent-transport-home-"));
+  const home = await mkdtemp(join(tmpdir(), "watchling-transport-home-"));
   driverTrace = createProfileTrace();
   const env = environment(home);
   const producerAbort = new AbortController();
@@ -1710,7 +1712,7 @@ async function runOne(
       !(await application.evaluate(
         () =>
           (
-            Reflect.get(globalThis, "__pagentTransportProfile") as
+            Reflect.get(globalThis, "__watchlingTransportProfile") as
               ProfileFixture | undefined
           )?.ready ?? false,
       ))
@@ -1724,7 +1726,7 @@ async function runOne(
     }
     page = application
       .windows()
-      .find((window) => window.url() === "pagent://app/pet/index.html");
+      .find((window) => window.url() === "watchling://app/pet/index.html");
     if (!page) throw new Error("Production pet renderer did not load");
     page.on("pageerror", (error) => {
       if (failures.length < 128) failures.push(`Renderer: ${error.message}`);
@@ -1733,7 +1735,7 @@ async function runOne(
     record.foregroundAtLaunch = foregroundAtLaunch;
     const actual = await application.evaluate(() => {
       const controls = (
-        Reflect.get(globalThis, "__pagentTransportProfile") as ProfileFixture
+        Reflect.get(globalThis, "__watchlingTransportProfile") as ProfileFixture
       ).controls!;
       return {
         descriptor: controls.collector?.descriptorPath,
@@ -1752,7 +1754,7 @@ async function runOne(
     });
     const warmup = await application.evaluate(() =>
       (
-        Reflect.get(globalThis, "__pagentTransportProfile") as ProfileFixture
+        Reflect.get(globalThis, "__watchlingTransportProfile") as ProfileFixture
       ).warmup(),
     );
     const running = await sequential(command, env, slots[0]!.input);
@@ -1793,7 +1795,7 @@ async function runOne(
     await until(warmupEnd);
     const baselineStats = await application.evaluate(() => ({
       ...(
-        Reflect.get(globalThis, "__pagentTransportProfile") as ProfileFixture
+        Reflect.get(globalThis, "__watchlingTransportProfile") as ProfileFixture
       ).controls!.collector!.stats(),
     }));
     if (baselineStats.queued !== 0 || baselineStats.activeConnections !== 0)
@@ -1823,7 +1825,10 @@ async function runOne(
     const arm = await application.evaluate(
       (_, args) =>
         (
-          Reflect.get(globalThis, "__pagentTransportProfile") as ProfileFixture
+          Reflect.get(
+            globalThis,
+            "__watchlingTransportProfile",
+          ) as ProfileFixture
         ).arm(args.profile, args.start),
       { profile, start: start.toString() },
     );
@@ -1873,12 +1878,12 @@ async function runOne(
     await until(start + BigInt(duration + 30_000) * 1_000_000n);
     const renderer = await page.evaluate(() =>
       (
-        Reflect.get(window, "__pagentProfileRenderer") as RendererFixture
+        Reflect.get(window, "__watchlingProfileRenderer") as RendererFixture
       ).stop(),
     );
     const main = await application.evaluate(() =>
       (
-        Reflect.get(globalThis, "__pagentTransportProfile") as ProfileFixture
+        Reflect.get(globalThis, "__watchlingTransportProfile") as ProfileFixture
       ).finish(),
     );
     const proxyFailures = [...proxy.failures];
@@ -2173,7 +2178,7 @@ async function runOne(
           });
         await application.evaluate(() =>
           (
-            Reflect.get(globalThis, "__pagentTransportProfile") as
+            Reflect.get(globalThis, "__watchlingTransportProfile") as
               ProfileFixture | undefined
           )?.abort(),
         );
@@ -2301,18 +2306,18 @@ export async function runProfiles(options: {
         "Select N, O, or both exactly once; each selection always runs three repetitions",
       );
     const packageDirectory = diagnosticNative
-      ? `pagent-diagnostic-darwin-${process.arch}`
+      ? `watchling-diagnostic-darwin-${process.arch}`
       : "unfused/mac-arm64";
     const executable = resolve(
-      `build/${packageDirectory}/pagent.app/Contents/MacOS/pagent`,
+      `build/${packageDirectory}/Watchling.app/Contents/MacOS/Watchling`,
     );
     const helperPath = resolve(
-      `build/${packageDirectory}/pagent.app/Contents/Resources/helpers/pagent-hook-emitter`,
+      `build/${packageDirectory}/Watchling.app/Contents/Resources/helpers/watchling-hook-emitter`,
     );
     const electronExecutable = createRequire(import.meta.url)(
       "electron",
     ) as string;
-    const appRoot = resolve(`build/${packageDirectory}/pagent.app/Contents`);
+    const appRoot = resolve(`build/${packageDirectory}/Watchling.app/Contents`);
     const macos = await execute("/usr/bin/sw_vers", ["-productVersion"], {
       timeout: 5000,
       maxBuffer: 4096,

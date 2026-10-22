@@ -37,7 +37,7 @@ const modeLabels = {
 };
 const backgrounds = { light: "Light", dark: "Dark", checker: "Transparent" };
 const sizes = { large: "2×", actual: "Actual size" };
-const STORAGE = "pagent.companions.saved";
+const STORAGE = "watchling.companions.saved";
 
 let config: CompanionConfig = { ...(defaults as CompanionConfig) };
 const stage = document.querySelector<HTMLElement>("#stage")!;

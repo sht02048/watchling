@@ -912,18 +912,18 @@ test("short ids are at least four characters and unique only within a project", 
   const observations = new Observations();
   feed(
     observations,
-    event("SessionStart", { sessionId: "4f2a9c1e", project: "pagent" }),
-    event("SessionStart", { sessionId: "4f2a77d0", project: "pagent" }),
-    event("SessionStart", { sessionId: "b81d0c3a", project: "pagent" }),
+    event("SessionStart", { sessionId: "4f2a9c1e", project: "watchling" }),
+    event("SessionStart", { sessionId: "4f2a77d0", project: "watchling" }),
+    event("SessionStart", { sessionId: "b81d0c3a", project: "watchling" }),
     event("SessionStart", { sessionId: "4f2a0000", project: "other" }),
     event("SessionStart", { sessionId: "ab", project: "tiny" }),
   );
   assert.deepEqual(
     observations.snapshot().sessions.map((row) => [row.project, row.shortId]),
     [
-      ["pagent", "4f2a9"],
-      ["pagent", "4f2a7"],
-      ["pagent", "b81d"],
+      ["watchling", "4f2a9"],
+      ["watchling", "4f2a7"],
+      ["watchling", "b81d"],
       ["other", "4f2a"],
       ["tiny", "ab"],
     ],

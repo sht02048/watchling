@@ -19,10 +19,10 @@ import { resolveAppPaths } from "../../src/main/app-paths.ts";
 
 const execute = promisify(execFile);
 test("packaged hooks CLI preserves existing settings in disposable HOME", async () => {
-  const home = await mkdtemp(join(tmpdir(), "pagent-packaged-"));
+  const home = await mkdtemp(join(tmpdir(), "watchling-packaged-"));
   const paths = resolveAppPaths(home);
   const executable = resolve(
-    "build/release/mac-arm64/pagent.app/Contents/MacOS/pagent",
+    "build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
   );
   const original = {
     theme: "dark",
@@ -41,7 +41,7 @@ test("packaged hooks CLI preserves existing settings in disposable HOME", async 
     return JSON.parse(result.stdout) as {
       mode: string;
       targets: { settings: string };
-      pagent: { status: string };
+      watchling: { status: string };
     };
   };
   try {
@@ -79,10 +79,10 @@ test("packaged hooks CLI preserves existing settings in disposable HOME", async 
 });
 
 test("packaged apply refuses symlink and nonregular settings without changing targets", async () => {
-  const home = await mkdtemp(join(tmpdir(), "pagent-packaged-"));
+  const home = await mkdtemp(join(tmpdir(), "watchling-packaged-"));
   const paths = resolveAppPaths(home);
   const executable = resolve(
-    "build/release/mac-arm64/pagent.app/Contents/MacOS/pagent",
+    "build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
   );
   const foreign = join(home, "foreign.json");
   const invoke = () =>
@@ -111,15 +111,15 @@ test("packaged apply refuses symlink and nonregular settings without changing ta
 
 test("packaged app relocates hooks only when launched from Applications", async () => {
   const home = await realpath(
-    await mkdtemp(join(tmpdir(), "pagent-packaged-")),
+    await mkdtemp(join(tmpdir(), "watchling-packaged-")),
   );
   const paths = resolveAppPaths(home);
-  const built = resolve("build/release/mac-arm64/pagent.app");
-  const installed = join(home, "Applications", "pagent.app");
+  const built = resolve("build/release/mac-arm64/Watchling.app");
+  const installed = join(home, "Applications", "Watchling.app");
   const helper = (bundle: string) =>
-    join(bundle, "Contents/Resources/helpers/pagent-hook-emitter");
+    join(bundle, "Contents/Resources/helpers/watchling-hook-emitter");
   const cli = (bundle: string, ...args: string[]) =>
-    execute(join(bundle, "Contents/MacOS/pagent"), ["hooks", ...args], {
+    execute(join(bundle, "Contents/MacOS/Watchling"), ["hooks", ...args], {
       env: { ...process.env, HOME: home },
       timeout: 10000,
     });
@@ -131,7 +131,7 @@ test("packaged app relocates hooks only when launched from Applications", async 
     ).helperPath;
   const launch = async (bundle: string, until: () => Promise<boolean>) => {
     await rm(paths.descriptorPath, { force: true });
-    const child = spawn(join(bundle, "Contents/MacOS/pagent"), [], {
+    const child = spawn(join(bundle, "Contents/MacOS/Watchling"), [], {
       env: { ...process.env, HOME: home },
       stdio: "ignore",
     });

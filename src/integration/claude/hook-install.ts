@@ -17,7 +17,7 @@ import { hookEvents, isEpoch, isRecord } from "./protocol.ts";
 
 export const SETTINGS_LIMIT = 1024 * 1024;
 export const MANIFEST_LIMIT = 128 * 1024;
-const LOCK_MAGIC = Buffer.from("pagent-hook-lock-v1\n");
+const LOCK_MAGIC = Buffer.from("watchling-hook-lock-v1\n");
 // Darwin sys/fcntl.h defines O_EXLOCK as 0x20. Node forwards numeric open flags
 // but does not export this flag; never use it on another platform.
 const DARWIN_O_EXLOCK = 0x20;
@@ -73,7 +73,7 @@ export interface HookReport {
     helper: string;
     descriptor: string;
   };
-  pagent: {
+  watchling: {
     operation: HookOperation;
     status:
       | "installed"
@@ -133,7 +133,8 @@ function validateLayout(paths: AppPaths, helperPath: string): string {
   const home = dirname(dirname(paths.settingsPath));
   if (
     paths.settingsPath !== join(home, ".claude", "settings.json") ||
-    paths.userData !== join(home, "Library", "Application Support", "pagent") ||
+    paths.userData !==
+      join(home, "Library", "Application Support", "watchling") ||
     paths.manifestPath !== join(paths.userData, "hooks-installation.json") ||
     paths.lockPath !== join(paths.userData, "hooks-install.lock") ||
     paths.backupDirectory !== join(paths.userData, "hook-backups") ||
@@ -465,12 +466,14 @@ function ownership(
           (command.includes(manifest.helperPath) ||
             command.includes(quoteHookArgument(manifest.helperPath)))) ||
         (command.includes("--installation-id") &&
-          (command.includes("pagent-hook-emitter") ||
+          (command.includes("watchling-hook-emitter") ||
             command.includes(descriptorPath) ||
             command.includes(quoteHookArgument(descriptorPath)))));
     if (!marked && !helperHint) continue;
     if (!manifest)
-      refuse("Pagent-like handlers exist without a private ownership manifest");
+      refuse(
+        "Watchling-like handlers exist without a private ownership manifest",
+      );
     const expected = manifest.hooks.find(
       (hook) => hook.event === location.event,
     );
@@ -818,7 +821,7 @@ function plan(
   state: State,
   manifest: Manifest,
   operation: HookOperation,
-): HookReport["pagent"]["diff"] {
+): HookReport["watchling"]["diff"] {
   const action = operation === "uninstall" ? "remove" : "add";
   return manifest.hooks
     .filter((hook) =>
@@ -952,9 +955,9 @@ function report(
   paths: AppPaths,
   helperPath: string,
   state: State,
-  diff: HookReport["pagent"]["diff"],
+  diff: HookReport["watchling"]["diff"],
 ): HookReport {
-  let status: HookReport["pagent"]["status"];
+  let status: HookReport["watchling"]["status"];
   if (operation === "uninstall")
     status = diff.length ? "would-uninstall" : "not-installed";
   else if (operation === "install" && diff.length) status = "would-install";
@@ -974,7 +977,7 @@ function report(
       helper: state.manifest?.helperPath ?? helperPath,
       descriptor: paths.descriptorPath,
     },
-    pagent: { operation, status, diff },
+    watchling: { operation, status, diff },
   };
 }
 
@@ -1039,8 +1042,8 @@ export async function manageClaudeHooks(
       : state.settings.snapshot;
     if (operation === "uninstall") {
       await removeManifest(paths, home, state, written, lock);
-      result.pagent.status = "not-installed";
-    } else result.pagent.status = "installed";
+      result.watchling.status = "not-installed";
+    } else result.watchling.status = "installed";
     return result;
   } finally {
     await releaseLock(paths, lock);

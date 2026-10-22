@@ -85,7 +85,7 @@ function canonical(value: unknown): string {
 
 function fingerprint(token: string, toolName: string, input: unknown): string {
   const key = createHmac("sha256", Buffer.from(token, "hex"))
-    .update("pagent-fingerprint-v1")
+    .update("watchling-fingerprint-v1")
     .digest();
   return createHmac("sha256", key)
     .update(`${toolName}\0${canonical(input)}`)
@@ -94,7 +94,7 @@ function fingerprint(token: string, toolName: string, input: unknown): string {
 }
 
 before(async () => {
-  directory = await mkdtemp(join(tmpdir(), "pagent-emitter-trace-"));
+  directory = await mkdtemp(join(tmpdir(), "watchling-emitter-trace-"));
   releaseBinary = join(
     execFileSync(
       "swift",
@@ -108,7 +108,7 @@ before(async () => {
       ],
       { encoding: "utf8" },
     ).trim(),
-    "pagent-hook-emitter",
+    "watchling-hook-emitter",
   );
   releaseDigest = digest(await readFile(releaseBinary));
   execFileSync(process.execPath, [builder, join(directory, "diagnostic")], {
@@ -256,7 +256,10 @@ test("diagnostic build has a private digest manifest and cannot overwrite output
   assert.deepEqual(Object.keys(manifest).sort(), ["binaryPath", "sha256"]);
   assert.equal(
     manifest.binaryPath,
-    join(await realpath(join(directory, "diagnostic")), "pagent-hook-emitter"),
+    join(
+      await realpath(join(directory, "diagnostic")),
+      "watchling-hook-emitter",
+    ),
   );
   assert.equal(manifest.sha256, digest(await readFile(binary)));
   assert.equal((await stat(manifestPath)).mode & 0o7777, 0o600);
@@ -478,7 +481,7 @@ async function compileFixture(name: string, source: string) {
     [
       "-O",
       "-D",
-      "PAGENT_NATIVE_TRACE",
+      "WATCHLING_NATIVE_TRACE",
       "-I",
       fixtureDirectory,
       object,

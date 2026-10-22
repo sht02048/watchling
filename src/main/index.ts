@@ -8,13 +8,13 @@ import {
   relocateClaudeHooks,
 } from "../integration/claude/hook-install.ts";
 
-app.setName("pagent");
+app.setName("watchling");
 const args = process.argv.slice(process.defaultApp ? 2 : 1);
 const paths = resolveAppPaths();
 const helperPath = join(
   process.resourcesPath,
   "helpers",
-  "pagent-hook-emitter",
+  "watchling-hook-emitter",
 );
 if (args[0] === "hooks") {
   app.setActivationPolicy("prohibited");
@@ -27,7 +27,7 @@ if (args[0] === "hooks") {
 } else {
   protocol.registerSchemesAsPrivileged([
     {
-      scheme: "pagent",
+      scheme: "watchling",
       privileges: { standard: true, secure: true, supportFetchAPI: true },
     },
   ]);

@@ -23,7 +23,7 @@ export async function runHookCommand(
     process.stdout.write(
       `${JSON.stringify({
         mode: "invalid",
-        pagent: {
+        watchling: {
           status: "invalid-arguments",
           diff: [],
           reason:
@@ -53,7 +53,7 @@ export async function runHookCommand(
           helper: helperPath,
           descriptor: paths.descriptorPath,
         },
-        pagent: {
+        watchling: {
           operation,
           status: exitCode === 2 ? "refused" : "failed",
           diff: [],

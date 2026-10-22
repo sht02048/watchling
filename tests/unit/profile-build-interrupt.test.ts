@@ -7,7 +7,9 @@ import test from "node:test";
 
 for (const phase of ["before-helper", "copy-bundle"] as const) {
   test(`profile interruption at ${phase} prevents subsequent build/profile work`, async () => {
-    const directory = await mkdtemp(join(tmpdir(), "pagent-build-interrupt-"));
+    const directory = await mkdtemp(
+      join(tmpdir(), "watchling-build-interrupt-"),
+    );
     let child: ReturnType<typeof spawn> | undefined;
     try {
       let source = await readFile(

@@ -33,7 +33,7 @@ const binary = join(
     ],
     { encoding: "utf8" },
   ).trim(),
-  "pagent-hook-emitter",
+  "watchling-hook-emitter",
 );
 const raw = {
   hook_event_name: "PreToolUse",
@@ -44,7 +44,7 @@ const raw = {
   prompt_id: "prompt-1",
   tool_input: {
     questions: ["private question"],
-    code: "pagent-input-secret-4f9c2a",
+    code: "watchling-input-secret-4f9c2a",
     limit: 3,
   },
   transcript_path: "/private/transcript",
@@ -66,7 +66,7 @@ function canonical(value: unknown): string {
 
 function fingerprint(token: string, toolName: string, input: unknown): string {
   const key = createHmac("sha256", Buffer.from(token, "hex"))
-    .update("pagent-fingerprint-v1")
+    .update("watchling-fingerprint-v1")
     .digest();
   return createHmac("sha256", key)
     .update(`${toolName}\0${canonical(input)}`)
@@ -135,7 +135,7 @@ function safe(result: Awaited<ReturnType<typeof run>>): void {
 }
 
 test("independent watchdog exits successfully while the main thread is blocked", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-watchdog-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-watchdog-"));
   try {
     const source = await readFile(
       "native/hook-emitter/Sources/HookEmitter/main.swift",
@@ -201,7 +201,7 @@ test("independent watchdog exits successfully while the main thread is blocked",
 });
 
 test("actual Swift helper delivers only metadata to the private collector", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-emitter-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-emitter-test-"));
   const events: ClaudeEvent[] = [];
   const identities: { eventId: string; receivedSeq: number }[] = [];
   const collector = await startCollector({
@@ -260,7 +260,7 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
 });
 
 test("permission requests report whether the spawning Claude process is interactive", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-emitter-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-emitter-test-"));
   const events: ClaudeEvent[] = [];
   const collector = await startCollector({
     directory,
@@ -290,7 +290,7 @@ process.stderr.write(result.stderr);
 process.exit(result.status ?? 1);
 `,
   );
-  const secret = "pagent-permission-secret-81d7";
+  const secret = "watchling-permission-secret-81d7";
   const permission = {
     hook_event_name: "PermissionRequest",
     session_id: "session-ask",
@@ -348,7 +348,7 @@ process.exit(result.status ?? 1);
 });
 
 test("app-off, invalid arguments and stalled stdin are silent bounded successes", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-emitter-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-emitter-test-"));
   try {
     const missing = join(directory, "absent.json");
     const off = await run(missing, JSON.stringify(raw));
@@ -364,7 +364,7 @@ test("app-off, invalid arguments and stalled stdin are silent bounded successes"
 });
 
 test("unsafe descriptors/socket links and oversized projections never deliver", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-emitter-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-emitter-test-"));
   const events: ClaudeEvent[] = [];
   const collector = await startCollector({
     directory,
@@ -415,7 +415,7 @@ test("unsafe descriptors/socket links and oversized projections never deliver", 
 });
 
 test("helper events drive session states through the collector", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-pipeline-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-pipeline-test-"));
   const observations = new Observations();
   let received = 0;
   const collector = await startCollector({
@@ -427,7 +427,7 @@ test("helper events drive session states through the collector", async () => {
     onLoss: () => assert.fail("Valid emitter delivery lost"),
   });
   const base = { session_id: "pipeline-a", cwd: "/private/pipeline" };
-  const input = { command: "printf pagent-pipeline-secret-7d1e" };
+  const input = { command: "printf watchling-pipeline-secret-7d1e" };
   const steps: [Record<string, unknown>, string | undefined, string][] = [
     [{ ...base, hook_event_name: "SessionStart" }, undefined, "idle"],
     [{ ...base, hook_event_name: "UserPromptSubmit" }, undefined, "working"],
@@ -459,7 +459,7 @@ test("helper events drive session states through the collector", async () => {
         tool_name: "Bash",
         tool_use_id: "toolu_pipeline",
         tool_input: input,
-        tool_response: { stdout: "pagent-pipeline-secret-7d1e" },
+        tool_response: { stdout: "watchling-pipeline-secret-7d1e" },
       },
       undefined,
       "working",
@@ -513,7 +513,7 @@ test("helper events drive session states through the collector", async () => {
         ),
       );
       assert.equal(
-        JSON.stringify(snapshot).includes("pagent-pipeline-secret"),
+        JSON.stringify(snapshot).includes("watchling-pipeline-secret"),
         false,
       );
     }

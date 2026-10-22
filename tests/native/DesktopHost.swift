@@ -54,7 +54,7 @@ final class DesktopHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     )
     view = DeliveryCountingView(frame: contentRect)
     super.init()
-    window.title = "pagent desktop test"
+    window.title = "Watchling desktop test"
     window.backgroundColor = .white
     window.collectionBehavior = [.fullScreenPrimary]
     window.isReleasedWhenClosed = false

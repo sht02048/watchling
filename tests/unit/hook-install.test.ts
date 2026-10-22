@@ -31,7 +31,7 @@ import {
 import { hookEvents, isRecord } from "../../src/integration/claude/protocol.ts";
 
 type JsonObject = Record<string, unknown>;
-const LOCK_MAGIC = "pagent-hook-lock-v1\n";
+const LOCK_MAGIC = "watchling-hook-lock-v1\n";
 // Darwin's O_EXLOCK is forwarded by Node but absent from fs.constants.
 const DARWIN_O_EXLOCK = 0x20;
 interface Fixture {
@@ -41,13 +41,13 @@ interface Fixture {
 }
 async function fixture(
   body: (value: Fixture) => Promise<void>,
-  prefix = "pagent-hooks-",
+  prefix = "watchling-hooks-",
 ): Promise<void> {
   const home = await mkdtemp(join(tmpdir(), prefix));
   try {
     const helperDirectory = join(home, "packaged helpers");
     await mkdir(helperDirectory, { mode: 0o700 });
-    const helper = join(helperDirectory, "pagent-hook-emitter");
+    const helper = join(helperDirectory, "watchling-hook-emitter");
     // The installer only validates this disposable regular file; it never runs it.
     await writeFile(helper, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     await body({ home, paths: resolveAppPaths(home), helper });
@@ -130,9 +130,9 @@ function cli(f: Fixture, argv: readonly string[], platform = process.platform) {
     .href;
   const source = `
     import { runHookCommand } from ${JSON.stringify(moduleUrl)};
-    Object.defineProperty(process, "platform", { value: process.env.PAGENT_TEST_PLATFORM });
-    const code = await runHookCommand(JSON.parse(process.env.PAGENT_TEST_ARGS),
-      JSON.parse(process.env.PAGENT_TEST_PATHS), process.env.PAGENT_TEST_HELPER);
+    Object.defineProperty(process, "platform", { value: process.env.WATCHLING_TEST_PLATFORM });
+    const code = await runHookCommand(JSON.parse(process.env.WATCHLING_TEST_ARGS),
+      JSON.parse(process.env.WATCHLING_TEST_PATHS), process.env.WATCHLING_TEST_HELPER);
     process.exitCode = code === null ? 77 : code;
   `;
   const result = spawnSync(
@@ -143,10 +143,10 @@ function cli(f: Fixture, argv: readonly string[], platform = process.platform) {
       env: {
         ...process.env,
         HOME: f.home,
-        PAGENT_TEST_ARGS: JSON.stringify(argv),
-        PAGENT_TEST_PATHS: JSON.stringify(f.paths),
-        PAGENT_TEST_HELPER: f.helper,
-        PAGENT_TEST_PLATFORM: platform,
+        WATCHLING_TEST_ARGS: JSON.stringify(argv),
+        WATCHLING_TEST_PATHS: JSON.stringify(f.paths),
+        WATCHLING_TEST_HELPER: f.helper,
+        WATCHLING_TEST_PLATFORM: platform,
       },
       timeout: 15_000,
     },
@@ -160,7 +160,7 @@ function nodeLock(f: Fixture, path = f.paths.lockPath) {
     import { constants } from "node:fs";
     import { open } from "node:fs/promises";
     try {
-      const file = await open(process.env.PAGENT_TEST_LOCK,
+      const file = await open(process.env.WATCHLING_TEST_LOCK,
         constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK | ${DARWIN_O_EXLOCK});
       await file.close();
     } catch (error) {
@@ -173,7 +173,7 @@ function nodeLock(f: Fixture, path = f.paths.lockPath) {
     ["--input-type=module", "--eval", source],
     {
       encoding: "utf8",
-      env: { ...process.env, HOME: f.home, PAGENT_TEST_LOCK: path },
+      env: { ...process.env, HOME: f.home, WATCHLING_TEST_LOCK: path },
       timeout: 15_000,
     },
   );
@@ -193,8 +193,8 @@ async function nodeOwner(f: Fixture, source: string) {
       import fs from "node:fs/promises";
       import { syncBuiltinESMExports } from "node:module";
       import { dirname, join } from "node:path";
-      const paths = JSON.parse(process.env.PAGENT_TEST_PATHS);
-      const helper = process.env.PAGENT_TEST_HELPER;
+      const paths = JSON.parse(process.env.WATCHLING_TEST_PATHS);
+      const helper = process.env.WATCHLING_TEST_HELPER;
       let paused = false;
       async function pause() {
         if (paused) throw new Error("Node fixture owner paused more than once");
@@ -212,8 +212,8 @@ async function nodeOwner(f: Fixture, source: string) {
       env: {
         ...process.env,
         HOME: f.home,
-        PAGENT_TEST_PATHS: JSON.stringify(f.paths),
-        PAGENT_TEST_HELPER: f.helper,
+        WATCHLING_TEST_PATHS: JSON.stringify(f.paths),
+        WATCHLING_TEST_HELPER: f.helper,
       },
     },
   );
@@ -357,22 +357,22 @@ test("check and both previews never create or rewrite any fixture path", async (
   await fixture(async (f) => {
     const empty = await tree(f.home);
     assert.equal(
-      (await manageClaudeHooks("check", false, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("check", false, f.paths, f.helper)).watchling
         .status,
       "not-installed",
     );
     assert.equal(
-      (await manageClaudeHooks("install", false, f.paths, f.helper)).pagent.diff
-        .length,
+      (await manageClaudeHooks("install", false, f.paths, f.helper)).watchling
+        .diff.length,
       hookEvents.length,
     );
     assert.equal(
-      (await manageClaudeHooks("uninstall", false, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("uninstall", false, f.paths, f.helper)).watchling
         .status,
       "not-installed",
     );
     assert.equal(
-      (await manageClaudeHooks("uninstall", true, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("uninstall", true, f.paths, f.helper)).watchling
         .status,
       "not-installed",
     );
@@ -426,7 +426,7 @@ test("installation is exact, private, stable, idempotent, and preserves unrelate
     await settings(f, original);
     const originalBytes = await readFile(f.paths.settingsPath);
     const result = await manageClaudeHooks("install", true, f.paths, f.helper);
-    assert.equal(result.pagent.status, "installed");
+    assert.equal(result.watchling.status, "installed");
     const manifest = await json(f.paths.manifestPath);
     assert.match(String(manifest.installationId), /^[0-9a-f-]{36}$/);
     const installed = await json(f.paths.settingsPath);
@@ -502,7 +502,7 @@ test("user edits and handlers inside owned groups survive uninstall with the hel
     await settings(f, edited);
     await unlink(f.helper);
     assert.equal(
-      (await manageClaudeHooks("check", false, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("check", false, f.paths, f.helper)).watchling
         .status,
       "installed",
     );
@@ -513,7 +513,7 @@ test("user edits and handlers inside owned groups survive uninstall with the hel
       f.paths,
       f.helper,
     );
-    assert.equal(preview.pagent.diff.length, hookEvents.length);
+    assert.equal(preview.watchling.diff.length, hookEvents.length);
     assert.deepEqual(await tree(f.home), before);
     const result = await manageClaudeHooks(
       "uninstall",
@@ -521,7 +521,7 @@ test("user edits and handlers inside owned groups survive uninstall with the hel
       f.paths,
       f.helper,
     );
-    assert.equal(result.pagent.status, "not-installed");
+    assert.equal(result.watchling.status, "not-installed");
     const after = await json(f.paths.settingsPath);
     assert.equal(after.theme, "after");
     assert.deepEqual(after.userAdded, { value: 42 });
@@ -535,7 +535,7 @@ test("user edits and handlers inside owned groups survive uninstall with the hel
       { matcher: "", hooks: [{ type: "command", command: "keep first" }] },
     ]);
     assert.equal(
-      (await manageClaudeHooks("uninstall", true, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("uninstall", true, f.paths, f.helper)).watchling
         .status,
       "not-installed",
     );
@@ -549,7 +549,7 @@ test("prepared manifests and partially missing entries reconcile using the origi
     // Model termination after durable intent but before any settings publication.
     await unlink(f.paths.settingsPath);
     assert.equal(
-      (await manageClaudeHooks("check", false, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("check", false, f.paths, f.helper)).watchling
         .status,
       "prepared",
     );
@@ -560,8 +560,8 @@ test("prepared manifests and partially missing entries reconcile using the origi
     delete partial.hooks.PreToolUse;
     await settings(f, partial);
     const check = await manageClaudeHooks("check", false, f.paths, f.helper);
-    assert.equal(check.pagent.status, "partial");
-    assert.deepEqual(check.pagent.diff, [
+    assert.equal(check.watchling.status, "partial");
+    assert.deepEqual(check.watchling.diff, [
       { event: "PreToolUse", matcher: "", action: "add" },
     ]);
     await manageClaudeHooks("install", true, f.paths, f.helper);
@@ -887,12 +887,12 @@ test("helper validation requires an owned regular executable but never blocks ch
     await refused(manageClaudeHooks("install", true, f.paths, f.helper));
     await unlink(f.helper);
     assert.equal(
-      (await manageClaudeHooks("check", false, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("check", false, f.paths, f.helper)).watchling
         .status,
       "not-installed",
     );
     assert.equal(
-      (await manageClaudeHooks("uninstall", true, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("uninstall", true, f.paths, f.helper)).watchling
         .status,
       "not-installed",
     );
@@ -917,7 +917,7 @@ test("settings and manifest reads are bounded, including UTF-8 byte counts", asy
     assert.equal(Buffer.byteLength(exact), SETTINGS_LIMIT);
     await writeFile(f.paths.settingsPath, exact);
     assert.equal(
-      (await manageClaudeHooks("check", false, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("check", false, f.paths, f.helper)).watchling
         .status,
       "not-installed",
     );
@@ -961,7 +961,7 @@ test("only fixed shell-quoted absolute arguments are emitted, even for hostile-l
     await refused(manageClaudeHooks("install", true, f.paths, moved));
     assert.deepEqual(await tree(f.home), before);
     await manageClaudeHooks("uninstall", true, f.paths, moved);
-  }, "pagent's hooks-;$(no-execution)-");
+  }, "watchling's hooks-;$(no-execution)-");
 });
 
 test("apply retains at most three private bounded backups and never restores a whole backup", async () => {
@@ -1123,7 +1123,7 @@ test("failed mutation retains the installer FD until its temporary cleanup has s
     await assert.rejects(lstat(f.paths.settingsPath), { code: "ENOENT" });
     assert.deepEqual(await readdir(dirname(f.paths.settingsPath)), []);
     assert.equal(
-      (await manageClaudeHooks("check", false, f.paths, f.helper)).pagent
+      (await manageClaudeHooks("check", false, f.paths, f.helper)).watchling
         .status,
       "prepared",
     );
@@ -1163,7 +1163,7 @@ test("foreign, malformed, insecure, symlink, and obsolete directory locks are ne
       "foreign",
       "{}",
       `${LOCK_MAGIC}extra`,
-      "pagent-hook-lock-v2\n",
+      "watchling-hook-lock-v2\n",
     ]) {
       await writeFile(f.paths.lockPath, bytes, { mode: 0o600 });
       const before = await tree(f.home);
@@ -1386,8 +1386,8 @@ test("the direct Node CLI dispatch is read-only by default, redacted, and has st
       assert.ok(isRecord(report));
       assert.deepEqual(Object.keys(report).sort(), [
         "mode",
-        "pagent",
         "targets",
+        "watchling",
       ]);
     }
     for (const argv of [
@@ -1445,11 +1445,11 @@ test("relocation rewrites owned hooks to a moved helper and keeps unrelated sett
     };
     await settings(f, original);
     await manageClaudeHooks("install", true, f.paths, f.helper);
-    const moved = join(f.home, "Applications", "pagent-hook-emitter");
+    const moved = join(f.home, "Applications", "watchling-hook-emitter");
     await mkdir(dirname(moved), { mode: 0o700 });
     await writeFile(moved, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     const result = await relocateClaudeHooks(f.paths, moved);
-    assert.equal(result?.pagent.status, "installed");
+    assert.equal(result?.watchling.status, "installed");
     assert.equal((await json(f.paths.manifestPath)).helperPath, moved);
     const relocated = await json(f.paths.settingsPath);
     assert.equal(JSON.stringify(relocated).includes(f.helper), false);

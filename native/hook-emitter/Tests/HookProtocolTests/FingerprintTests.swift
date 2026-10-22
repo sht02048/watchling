@@ -134,7 +134,7 @@ final class FingerprintTests: XCTestCase {
     func testKeyIsDerivedFromLowercaseHexTokenAndNeverTheTokenItself() {
         let token = Data(repeating: 0xAB, count: 32)
         let expected = Data(HMAC<SHA256>.authenticationCode(
-            for: Array("pagent-fingerprint-v1".utf8), using: SymmetricKey(data: token)
+            for: Array("watchling-fingerprint-v1".utf8), using: SymmetricKey(data: token)
         ))
         let derived = InputFingerprint.key(token: String(repeating: "ab", count: 32))
         XCTAssertEqual(derived, expected)

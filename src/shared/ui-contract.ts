@@ -68,6 +68,6 @@ export interface PetBridge {
 
 declare global {
   interface Window {
-    pagent: PetBridge;
+    watchling: PetBridge;
   }
 }

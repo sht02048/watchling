@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { PositionStore } from "../../src/main/position-store.ts";
 
 test("serializes position updates and restores the final value", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-position-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-position-"));
   try {
     const store = new PositionStore(directory);
     assert.equal(await store.load(), null);
@@ -29,7 +29,7 @@ test("serializes position updates and restores the final value", async () => {
   }
 });
 test("invalid persistence never becomes a window coordinate", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-position-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-position-"));
   try {
     const store = new PositionStore(directory);
     for (const data of [

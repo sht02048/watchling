@@ -31,7 +31,7 @@ const modeLabels: Record<AttentionConfig["mode"], string> = {
 };
 const backgrounds = { light: "Light", dark: "Dark", checker: "Transparent" };
 const sizes = { large: "2×", actual: "Actual size" };
-const STORAGE = "pagent.attention.saved";
+const STORAGE = "watchling.attention.saved";
 
 let config: AttentionConfig = { ...(defaults as AttentionConfig) };
 const stage = document.querySelector<HTMLElement>("#stage")!;

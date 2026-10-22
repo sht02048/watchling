@@ -2,7 +2,7 @@
 
 ## Decision
 
-pagent stays a read-only observer. It never answers permission or question prompts. Because Claude Code command hooks provide no causally correlated human-wait entry/clear pair (see `claude-coverage.md`), `attention` is replaced by `asking`, which means **a prompt was probably shown to the person**, not that a person is confirmed to be waiting.
+Watchling stays a read-only observer. It never answers permission or question prompts. Because Claude Code command hooks provide no causally correlated human-wait entry/clear pair (see `claude-coverage.md`), `attention` is replaced by `asking`, which means **a prompt was probably shown to the person**, not that a person is confirmed to be waiting.
 
 Comparable projects reach the same limit. Those that know exact wait timing do so only by holding the permission hook open and answering it in-app, which is out of scope here.
 

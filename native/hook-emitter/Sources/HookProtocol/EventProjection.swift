@@ -148,7 +148,7 @@ private struct AgentResponse: Decodable {
 private struct DecodedProjection: Decodable {
     let event: ClaudeEvent
 
-    static let fingerprintKey = CodingUserInfoKey(rawValue: "pagent.fingerprintKey")!
+    static let fingerprintKey = CodingUserInfoKey(rawValue: "watchling.fingerprintKey")!
     private static let fingerprintedEvents: Set<String> = [
         "PreToolUse", "PermissionRequest", "PostToolUse", "PostToolUseFailure",
     ]

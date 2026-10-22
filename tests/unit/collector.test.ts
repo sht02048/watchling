@@ -52,7 +52,7 @@ async function until(predicate: () => boolean): Promise<void> {
 }
 
 test("accepts private authenticated metadata and rejects old epochs/tokens", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const received: ClaudeEvent[] = [];
   const losses: LossReason[] = [];
   const collector = await startCollector({
@@ -95,7 +95,7 @@ test("accepts private authenticated metadata and rejects old epochs/tokens", asy
 });
 
 test("authenticated malformed data reports loss without retaining raw content", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const losses: LossReason[] = [];
   const collector = await startCollector({
     directory,
@@ -118,7 +118,7 @@ test("authenticated malformed data reports loss without retaining raw content", 
 });
 
 test("authenticated malformed transport IDs and legacy frames cannot enter the cache", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const losses: LossReason[] = [];
   const receipts: TransportReceipt[] = [];
   const collector = await startCollector({
@@ -148,7 +148,7 @@ test("authenticated malformed transport IDs and legacy frames cannot enter the c
 });
 
 test("exact replays do not queue again and identical payloads with distinct UUIDs remain independent", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const losses: LossReason[] = [];
   const received: {
     event: ClaudeEvent;
@@ -211,7 +211,7 @@ test("exact replays do not queue again and identical payloads with distinct UUID
 });
 
 test("authentication precedes replay lookup and conflicting authenticated ID reuse is rejected", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const received: ClaudeEvent[] = [];
   const losses: LossReason[] = [];
   const receipts: TransportReceipt[] = [];
@@ -284,7 +284,7 @@ test("authentication precedes replay lookup and conflicting authenticated ID reu
 });
 
 test("replay content comparison ignores JSON encoding order but preserves nested provider content", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const received: ClaudeEvent[] = [];
   const losses: LossReason[] = [];
   const collector = await startCollector({
@@ -348,7 +348,7 @@ test("replay content comparison ignores JSON encoding order but preserves nested
 });
 
 test("bounded queue marks overflow and resumes finite batches", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const received: ClaudeEvent[] = [];
   const losses: LossReason[] = [];
   const receipts: TransportReceipt[] = [];
@@ -423,7 +423,7 @@ test("bounded queue marks overflow and resumes finite batches", async () => {
 });
 
 test("replay suppression is bounded to 4096 retained IDs and FIFO eviction is explicit", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const losses: LossReason[] = [];
   let delivered = 0;
   const collector = await startCollector({
@@ -469,7 +469,7 @@ test("replay suppression is bounded to 4096 retained IDs and FIFO eviction is ex
 });
 
 test("1200 admitted frames account for 1080 independent emissions and 120 exact replays", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const received: ClaudeEvent[] = [];
   const identities: { eventId: string; receivedSeq: number }[] = [];
   const receipts: TransportReceipt[] = [];
@@ -535,7 +535,7 @@ test("1200 admitted frames account for 1080 independent emissions and 120 exact 
 });
 
 test("fixture observer failures and mutations cannot change admission or delivery accounting", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const received: ClaudeEvent[] = [];
   const losses: LossReason[] = [];
   let observed = 0;
@@ -571,7 +571,7 @@ test("fixture observer failures and mutations cannot change admission or deliver
 });
 
 test("consumer failure is explicit and a captured replay does not retry delivery", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const losses: LossReason[] = [];
   let attempts = 0;
   const collector = await startCollector({
@@ -601,7 +601,7 @@ test("consumer failure is explicit and a captured replay does not retry delivery
 });
 
 test("unauthenticated size and connection pressure cannot assert stream loss", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const losses: LossReason[] = [];
   const collector = await startCollector({
     directory,
@@ -638,7 +638,7 @@ test("unauthenticated size and connection pressure cannot assert stream loss", a
 });
 
 test("partial senders expire and shutdown releases active clients", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const collector = await startCollector({
     directory,
     onEvent: () => assert.fail("Partial input delivered"),
@@ -665,7 +665,7 @@ test("partial senders expire and shutdown releases active clients", async () => 
 });
 
 test("private directory and descriptor symlink checks never replace user files", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-collector-test-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
   const options = { directory, onEvent: () => {}, onLoss: () => {} };
   try {
     await chmod(directory, 0o755);

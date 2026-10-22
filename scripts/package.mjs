@@ -14,9 +14,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 if (process.platform !== "darwin")
-  throw new Error("pagent v1 supports macOS only");
+  throw new Error("Watchling v1 supports macOS only");
 if (process.arch !== "arm64")
-  throw new Error("pagent local builds support Apple silicon only");
+  throw new Error("Watchling local builds support Apple silicon only");
 const manifest = JSON.parse(await readFile("package.json", "utf8"));
 const nativeBin = execFileSync(
   "swift",
@@ -32,7 +32,7 @@ const nativeBin = execFileSync(
 ).trim();
 const releaseDirectory = resolve("build/release");
 const unfusedDirectory = resolve("build/unfused");
-const scratch = await mkdtemp(join(tmpdir(), "pagent-package-"));
+const scratch = await mkdtemp(join(tmpdir(), "watchling-package-"));
 try {
   const directory = join(scratch, "app");
   await mkdir(directory);
@@ -41,7 +41,7 @@ try {
     join(directory, "package.json"),
     JSON.stringify({
       name: manifest.name,
-      productName: "pagent",
+      productName: "Watchling",
       version: manifest.version,
       description: manifest.description,
       private: true,
@@ -49,24 +49,24 @@ try {
       main: "dist/main/index.js",
     }),
   );
-  const helper = join(scratch, "pagent-hook-emitter");
-  await cp(join(nativeBin, "pagent-hook-emitter"), helper);
+  const helper = join(scratch, "watchling-hook-emitter");
+  await cp(join(nativeBin, "watchling-hook-emitter"), helper);
   await chmod(helper, 0o755);
   const config = (output, fused) => ({
-    appId: "local.pagent.desktop",
-    productName: "pagent",
+    appId: "dev.watchling.app",
+    productName: "Watchling",
     electronVersion: manifest.devDependencies.electron,
     directories: { app: directory, output },
     files: ["dist/**/*", "package.json"],
     asar: true,
     npmRebuild: false,
     nodeGypRebuild: false,
-    extraResources: [{ from: helper, to: "helpers/pagent-hook-emitter" }],
+    extraResources: [{ from: helper, to: "helpers/watchling-hook-emitter" }],
     afterPack: (context) =>
       chmod(
         join(
           context.appOutDir,
-          "pagent.app/Contents/Resources/helpers/pagent-hook-emitter",
+          "Watchling.app/Contents/Resources/helpers/watchling-hook-emitter",
         ),
         0o755,
       ),
@@ -87,7 +87,7 @@ try {
       notarize: false,
       extendInfo: { LSUIElement: true },
     },
-    dmg: { artifactName: "pagent-${version}-${arch}.${ext}" },
+    dmg: { artifactName: "Watchling-${version}-${arch}.${ext}" },
     publish: null,
   });
   await rm(releaseDirectory, { recursive: true, force: true });
@@ -105,12 +105,12 @@ try {
     });
     const helperPath = join(
       output,
-      "mac-arm64/pagent.app/Contents/Resources/helpers/pagent-hook-emitter",
+      "mac-arm64/Watchling.app/Contents/Resources/helpers/watchling-hook-emitter",
     );
     if (((await stat(helperPath)).mode & 0o7777) !== 0o755)
       throw new Error("Packaged hook helper must have mode 0755");
     for (const artifact of artifacts) console.log(artifact);
-    console.log(join(output, "mac-arm64/pagent.app"));
+    console.log(join(output, "mac-arm64/Watchling.app"));
   }
 } finally {
   await rm(scratch, { recursive: true, force: true });

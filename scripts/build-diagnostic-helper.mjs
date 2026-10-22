@@ -26,7 +26,7 @@ if (process.platform !== "darwin")
 
 await mkdir(resolve(output), { recursive: true, mode: 0o700 });
 const outputDirectory = await realpath(resolve(output));
-const binaryPath = join(outputDirectory, "pagent-hook-emitter");
+const binaryPath = join(outputDirectory, "watchling-hook-emitter");
 const manifestPath = join(outputDirectory, "manifest.json");
 // Refuse all existing outputs, including symlinks, release and packaged helpers.
 for (const path of [binaryPath, manifestPath]) {
@@ -39,7 +39,7 @@ for (const path of [binaryPath, manifestPath]) {
   throw new Error(`Refusing to overwrite existing diagnostic output: ${path}`);
 }
 
-const scratch = await mkdtemp(join(tmpdir(), "pagent-diagnostic-swift-"));
+const scratch = await mkdtemp(join(tmpdir(), "watchling-diagnostic-swift-"));
 try {
   const arguments_ = [
     "build",
@@ -50,7 +50,7 @@ try {
     "-c",
     "release",
     "-Xswiftc",
-    "-DPAGENT_NATIVE_TRACE",
+    "-DWATCHLING_NATIVE_TRACE",
   ];
   execFileSync("swift", arguments_, { stdio: "inherit" });
   const binDirectory = execFileSync(
@@ -58,7 +58,7 @@ try {
     [...arguments_, "--show-bin-path"],
     { encoding: "utf8" },
   ).trim();
-  const source = join(binDirectory, "pagent-hook-emitter");
+  const source = join(binDirectory, "watchling-hook-emitter");
   const sha256 = createHash("sha256")
     .update(await readFile(source))
     .digest("hex");

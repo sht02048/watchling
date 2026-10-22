@@ -17,23 +17,25 @@ function subscribe<T>(
 }
 
 const bridge: PetBridge = Object.freeze({
-  getSnapshot: (): Promise<Snapshot> => ipcRenderer.invoke("pagent:snapshot"),
+  getSnapshot: (): Promise<Snapshot> =>
+    ipcRenderer.invoke("watchling:snapshot"),
   onSnapshot: (listener: (snapshot: Snapshot) => void) =>
-    subscribe("pagent:snapshot-changed", listener),
+    subscribe("watchling:snapshot-changed", listener),
   onCursor: (listener: (point: Point) => void) =>
-    subscribe("pagent:cursor", listener),
+    subscribe("watchling:cursor", listener),
   setPetHit: (hit: boolean) => {
-    if (typeof hit === "boolean") ipcRenderer.send("pagent:pet-hit", hit);
+    if (typeof hit === "boolean") ipcRenderer.send("watchling:pet-hit", hit);
   },
   beginDrag: (cursor: Point) => {
     if (isPoint(cursor))
-      ipcRenderer.send("pagent:drag-start", { x: cursor.x, y: cursor.y });
+      ipcRenderer.send("watchling:drag-start", { x: cursor.x, y: cursor.y });
   },
-  endDrag: () => ipcRenderer.send("pagent:drag-end"),
-  openSessionList: () => ipcRenderer.send("pagent:list-open"),
-  closeSessionList: () => ipcRenderer.send("pagent:list-close"),
+  endDrag: () => ipcRenderer.send("watchling:drag-end"),
+  openSessionList: () => ipcRenderer.send("watchling:list-open"),
+  closeSessionList: () => ipcRenderer.send("watchling:list-close"),
   copySessionId: (id: string) => {
-    if (typeof id === "string") ipcRenderer.send("pagent:copy-session-id", id);
+    if (typeof id === "string")
+      ipcRenderer.send("watchling:copy-session-id", id);
   },
 });
-contextBridge.exposeInMainWorld("pagent", bridge);
+contextBridge.exposeInMainWorld("watchling", bridge);

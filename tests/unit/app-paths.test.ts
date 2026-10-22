@@ -6,22 +6,22 @@ const home = "/Users/fixture";
 
 test("installed app locations are the system and user Applications folders", () => {
   for (const path of [
-    "/Applications/pagent.app/Contents/MacOS/pagent",
-    "/Users/fixture/Applications/pagent.app/Contents/MacOS/pagent",
+    "/Applications/Watchling.app/Contents/MacOS/Watchling",
+    "/Users/fixture/Applications/Watchling.app/Contents/MacOS/Watchling",
   ])
     assert.equal(isInstalledAppLocation(path, home), true, path);
 });
 
 test("translocated, mounted, nested, build, and unnormalized locations are not installed", () => {
   for (const path of [
-    "/private/var/folders/xy/T/AppTranslocation/0A1B/d/pagent.app/Contents/MacOS/pagent",
-    "/Volumes/pagent 0.1.0-arm64/pagent.app/Contents/MacOS/pagent",
-    "/Users/fixture/Desktop/code/pagent/build/release/mac-arm64/pagent.app/Contents/MacOS/pagent",
-    "/Applications/Tools/pagent.app/Contents/MacOS/pagent",
-    "/Applications/pagent/Contents/MacOS/pagent",
-    "/Applications/../Volumes/pagent.app/Contents/MacOS/pagent",
-    "/Users/other/Applications/pagent.app/Contents/MacOS/pagent",
-    "Applications/pagent.app/Contents/MacOS/pagent",
+    "/private/var/folders/xy/T/AppTranslocation/0A1B/d/Watchling.app/Contents/MacOS/Watchling",
+    "/Volumes/Watchling 0.1.0-arm64/Watchling.app/Contents/MacOS/Watchling",
+    "/Users/fixture/Desktop/code/watchling/build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
+    "/Applications/Tools/Watchling.app/Contents/MacOS/Watchling",
+    "/Applications/Watchling/Contents/MacOS/Watchling",
+    "/Applications/../Volumes/Watchling.app/Contents/MacOS/Watchling",
+    "/Users/other/Applications/Watchling.app/Contents/MacOS/Watchling",
+    "Applications/Watchling.app/Contents/MacOS/Watchling",
   ])
     assert.equal(isInstalledAppLocation(path, home), false, path);
 });

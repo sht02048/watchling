@@ -89,18 +89,21 @@ try {
     );
     checkInterrupted();
     const diagnosticApp = resolve(
-      `build/pagent-diagnostic-darwin-${process.arch}/pagent.app`,
+      `build/watchling-diagnostic-darwin-${process.arch}/Watchling.app`,
     );
     await rm(diagnosticApp, { recursive: true, force: true });
     checkInterrupted();
-    await cp(resolve("build/unfused/mac-arm64/pagent.app"), diagnosticApp, {
+    await cp(resolve("build/unfused/mac-arm64/Watchling.app"), diagnosticApp, {
       recursive: true,
       verbatimSymlinks: true,
     });
     checkInterrupted();
     await cp(
       manifest.binaryPath,
-      resolve(diagnosticApp, "Contents/Resources/helpers/pagent-hook-emitter"),
+      resolve(
+        diagnosticApp,
+        "Contents/Resources/helpers/watchling-hook-emitter",
+      ),
     );
     checkInterrupted();
   }
@@ -123,7 +126,7 @@ try {
     stdin: {
       contents:
         renderer +
-        '\nObject.defineProperty(window, "__pagentProfileRender", { value: render });\n',
+        '\nObject.defineProperty(window, "__watchlingProfileRender", { value: render });\n',
       resolveDir: dirname(rendererPath),
       sourcefile: rendererPath,
       loader: "ts",

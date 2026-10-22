@@ -22,11 +22,11 @@ The packaged CLI's real-HOME preview/install/check/uninstall/check round trip pa
 `scripts/probe-live-claude.mjs` requires an explicit authorization argument. It is not part of ordinary tests and must not be run without prior user authorization. Both modes use a temporary empty workspace, a single requested tool, no MCP servers, and restrictive permission prompting. The script pins the resolved Claude executable before querying its version and launching it. The model response is not included in evidence.
 
 - `--authorized-live-negative-control Bash|AskUserQuestion` uses nonpersistent print mode, a 90-second process deadline, and a $0.25 request budget.
-- `--authorized-live-interactive-probe Bash|AskUserQuestion` opens a temporary command in Terminal and requires the operator to handle the workspace trust and tool prompts. It has a 120-second wait bound and supervised process cleanup, but does **not** use nonpersistent mode or a request-budget flag. Claude itself may therefore retain the synthetic session; pagent does not read that history.
+- `--authorized-live-interactive-probe Bash|AskUserQuestion` opens a temporary command in Terminal and requires the operator to handle the workspace trust and tool prompts. It has a 120-second wait bound and supervised process cleanup, but does **not** use nonpersistent mode or a request-budget flag. Claude itself may therefore retain the synthetic session; Watchling does not read that history.
 
 ### Permission negative control: Claude Code 2.1.306
 
-Command mode: `--print --permission-mode manual --permission-prompts none`, with `permissions.ask: ["Bash"]`. This mode has no human permission-answering host. The request was limited to one harmless `printf pagent-live-probe` tool invocation, with no retry after denial.
+Command mode: `--print --permission-mode manual --permission-prompts none`, with `permissions.ask: ["Bash"]`. This mode has no human permission-answering host. The request was limited to one harmless `printf watchling-live-probe` tool invocation, with no retry after denial.
 
 Observed projected sequence:
 

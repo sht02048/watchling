@@ -24,7 +24,7 @@ function installedAppRunning() {
   try {
     execFileSync("pgrep", [
       "-f",
-      "/Applications/pagent.app/Contents/MacOS/pagent$",
+      "/Applications/Watchling.app/Contents/MacOS/Watchling$",
     ]);
     return true;
   } catch {
@@ -34,14 +34,14 @@ function installedAppRunning() {
 
 async function quitInstalledApp() {
   if (process.env.HOME !== userInfo().homedir || !installedAppRunning()) return;
-  log("Quitting the installed pagent to run the dev build");
-  execFileSync("osascript", ["-e", 'quit app "pagent"']);
+  log("Quitting the installed Watchling to run the dev build");
+  execFileSync("osascript", ["-e", 'quit app "Watchling"']);
   for (let attempt = 0; attempt < 50 && installedAppRunning(); attempt++)
     await new Promise((resolve) => setTimeout(resolve, 100));
 }
 
 function launch() {
-  const env = { ...process.env, PAGENT_DEV: "1" };
+  const env = { ...process.env, WATCHLING_DEV: "1" };
   // Electron-based tools such as Claude Code export this, which would start Electron as plain Node.
   delete env.ELECTRON_RUN_AS_NODE;
   app = spawn(electron, ["."], { stdio: "inherit", env });
@@ -73,7 +73,7 @@ function notify(onRebuild) {
   firstBuilds.push(new Promise((resolve) => (resolveFirst = resolve)));
   let first = true;
   return {
-    name: "pagent-dev",
+    name: "watchling-dev",
     setup(build) {
       build.onEnd((result) => {
         if (first) {

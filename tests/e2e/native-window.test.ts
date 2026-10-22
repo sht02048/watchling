@@ -119,7 +119,7 @@ const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 180));
 
 test("real macOS input passes through empty pixels without stealing focus, including fullscreen", async ({}, testInfo) => {
   test.setTimeout(120000);
-  const temporary = await mkdtemp(join(tmpdir(), "pagent-native-"));
+  const temporary = await mkdtemp(join(tmpdir(), "watchling-native-"));
   try {
     const binary = join(temporary, "DesktopHost");
     await promisify(execFile)("swiftc", [
@@ -138,7 +138,7 @@ test("real macOS input passes through empty pixels without stealing focus, inclu
         .poll(() =>
           application
             .windows()
-            .some((page) => page.url() === "pagent://app/pet/index.html"),
+            .some((page) => page.url() === "watchling://app/pet/index.html"),
         )
         .toBe(true);
       await expect
@@ -192,7 +192,7 @@ test("real macOS input passes through empty pixels without stealing focus, inclu
           window.webContents.getURL().includes("/pet/"),
         )!;
         for (let i = 0; i < 100; i++)
-          pet.webContents.send("pagent:snapshot-changed", {
+          pet.webContents.send("watchling:snapshot-changed", {
             state: i % 2 ? "working" : "unknown",
             sessions: [],
             companions: 0,

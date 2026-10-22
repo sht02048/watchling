@@ -10,7 +10,7 @@ import {
 } from "../../src/shared/ui-contract.ts";
 
 test("native pet uses isolated UI, continuous animation and a read-only list", async () => {
-  const home = await mkdtemp(join(tmpdir(), "pagent-electron-"));
+  const home = await mkdtemp(join(tmpdir(), "watchling-electron-"));
   const application = await electron.launch({
     args: [resolve(".")],
     env: { ...process.env, HOME: home },
@@ -25,14 +25,14 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
           .sort(),
       )
       .toEqual([
-        "pagent://app/pet/index.html",
-        "pagent://app/sessions/index.html",
+        "watchling://app/pet/index.html",
+        "watchling://app/sessions/index.html",
       ]);
     const page = application
       .windows()
-      .find((page) => page.url() === "pagent://app/pet/index.html")!;
+      .find((page) => page.url() === "watchling://app/pet/index.html")!;
     page.on("pageerror", (error) => errors.push(error.message));
-    await expect.poll(() => page.url()).toBe("pagent://app/pet/index.html");
+    await expect.poll(() => page.url()).toBe("watchling://app/pet/index.html");
     await expect.poll(() => application.windows().length).toBe(2);
     const sessionPage = application
       .windows()
@@ -75,7 +75,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
       await page.evaluate(() => ({
         require: typeof Reflect.get(window, "require"),
         process: typeof Reflect.get(window, "process"),
-        rawIpc: typeof Reflect.get(window.pagent, "ipcRenderer"),
+        rawIpc: typeof Reflect.get(window.watchling, "ipcRenderer"),
       })),
     ).toEqual({
       require: "undefined",
@@ -95,7 +95,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
           const pet = BrowserWindow.getAllWindows().find((window) =>
             window.webContents.getURL().includes("/pet/"),
           )!;
-          pet.webContents.send("pagent:snapshot-changed", {
+          pet.webContents.send("watchling:snapshot-changed", {
             state,
             sessions: [],
             companions: 0,
@@ -152,7 +152,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
         ),
       )
       .toBe(false);
-    await sessionPage!.evaluate(() => window.pagent.openSessionList());
+    await sessionPage!.evaluate(() => window.watchling.openSessionList());
     expect(
       await application.evaluate(({ BrowserWindow }) =>
         BrowserWindow.getAllWindows()
@@ -163,7 +163,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
     await expect(
       page.evaluate(async () => {
         try {
-          await fetch("pagent://app/main/index.js");
+          await fetch("watchling://app/main/index.js");
           return false;
         } catch {
           return true;
@@ -183,7 +183,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
         ],
         { encoding: "utf8" },
       ).trim(),
-      "pagent-hook-emitter",
+      "watchling-hook-emitter",
     );
     await new Promise<void>((done, reject) => {
       const child = execFile(
@@ -219,7 +219,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
     await expect
       .poll(() =>
         sessionPage!.evaluate(
-          async () => (await window.pagent.getSnapshot()).sessions,
+          async () => (await window.watchling.getSnapshot()).sessions,
         ),
       )
       .toEqual([

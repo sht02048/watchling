@@ -74,7 +74,7 @@ export interface CollectorStats {
   firstAuthenticatedOverflowAt: number | null;
 }
 const uid = process.getuid!();
-const socketPrefix = join(tmpdir(), `pagent-${uid}-`);
+const socketPrefix = join(tmpdir(), `watchling-${uid}-`);
 const MAX_RECENT_FRAMES = 4096;
 function eventDigest(event: ClaudeEvent): string {
   return createHash("sha256")
@@ -138,7 +138,7 @@ async function readEndpoint(path: string): Promise<Endpoint | null> {
         !isToken(value.token) ||
         typeof value.socketPath !== "string" ||
         !value.socketPath.startsWith(socketPrefix) ||
-        !/^pagent-\d+-[A-Za-z0-9]+$/.test(
+        !/^watchling-\d+-[A-Za-z0-9]+$/.test(
           dirname(value.socketPath).split("/").at(-1) ?? "",
         ) ||
         value.socketPath !== join(dirname(value.socketPath), "socket")

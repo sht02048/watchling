@@ -83,7 +83,7 @@ let trayState: SemanticState | undefined;
 function updateTray(): void {
   if (!tray || tray.isDestroyed() || trayState === snapshot.state) return;
   trayState = snapshot.state;
-  tray.setToolTip(`pagent — ${stateLabels[trayState]}`);
+  tray.setToolTip(`Watchling — ${stateLabels[trayState]}`);
 }
 
 function queueSnapshot(): void {
@@ -200,13 +200,13 @@ async function start(options: DesktopOptions): Promise<void> {
       ["index.js", "text/javascript"],
       ["style.css", "text/css"],
     ] as const) {
-      assets.set(`pagent://app/${view}/${file}`, {
+      assets.set(`watchling://app/${view}/${file}`, {
         path: join(root, "renderer", view, file),
         mime,
       });
     }
   }
-  protocol.handle("pagent", async (request) => {
+  protocol.handle("watchling", async (request) => {
     const asset = assets.get(request.url);
     if (request.method !== "GET" || !asset)
       return new Response(null, { status: 404 });
@@ -256,7 +256,7 @@ async function start(options: DesktopOptions): Promise<void> {
     fullscreenable: false,
     focusable: false,
     skipTaskbar: true,
-    title: "pagent",
+    title: "Watchling",
     webPreferences,
   });
   list = new BrowserWindow({
@@ -268,7 +268,7 @@ async function start(options: DesktopOptions): Promise<void> {
     minimizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    title: "pagent sessions",
+    title: "Watchling sessions",
     backgroundColor: "#faf8f3",
     webPreferences,
   });
@@ -319,8 +319,8 @@ async function start(options: DesktopOptions): Promise<void> {
     app.quit();
   });
   await Promise.all([
-    pet.loadURL("pagent://app/pet/index.html"),
-    list.loadURL("pagent://app/sessions/index.html"),
+    pet.loadURL("watchling://app/pet/index.html"),
+    list.loadURL("watchling://app/sessions/index.html"),
   ]);
   const bitmap = Buffer.alloc(18 * 18 * 4);
   for (let y = 0; y < 18; y++) {
@@ -368,7 +368,7 @@ async function start(options: DesktopOptions): Promise<void> {
           send: (value: Snapshot) => {
             const finishTrace = options.trace?.("snapshot.send");
             try {
-              window.webContents.send("pagent:snapshot-changed", value);
+              window.webContents.send("watchling:snapshot-changed", value);
             } finally {
               finishTrace?.();
             }
@@ -411,7 +411,7 @@ async function start(options: DesktopOptions): Promise<void> {
       const cursor = screen.getCursorScreenPoint();
       updateDrag(cursor);
       const bounds = pet.getBounds();
-      pet.webContents.send("pagent:cursor", {
+      pet.webContents.send("watchling:cursor", {
         x: cursor.x - bounds.x,
         y: cursor.y - bounds.y,
       });
@@ -419,7 +419,7 @@ async function start(options: DesktopOptions): Promise<void> {
       finishTrace?.();
     }
   }, 50);
-  if (process.env.PAGENT_DEV === "1" && !app.isPackaged) {
+  if (process.env.WATCHLING_DEV === "1" && !app.isPackaged) {
     let pending: ReturnType<typeof setTimeout> | undefined;
     rendererWatcher = watch(join(root, "renderer"), { recursive: true }, () => {
       clearTimeout(pending);
@@ -486,7 +486,7 @@ export async function runDesktop(
       .whenReady()
       .then(() => start(options))
       .catch(() => {
-        console.error("pagent startup failed");
+        console.error("Watchling startup failed");
         app.quit();
       });
   }

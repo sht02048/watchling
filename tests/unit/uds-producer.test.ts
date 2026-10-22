@@ -23,7 +23,7 @@ const endpoint: Endpoint = {
   version: 1,
   epoch: "00000000-0000-4000-8000-000000000000",
   token: "0".repeat(64),
-  socketPath: "/not-an-existing-pagent-test-socket",
+  socketPath: "/not-an-existing-watchling-test-socket",
 };
 const signal = (): AbortSignal => new AbortController().signal;
 
@@ -495,7 +495,7 @@ test("the shared scheduler refuses a 33rd client without lowering or backfilling
 });
 
 async function stalledPeer() {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-uds-unit-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-uds-unit-"));
   const path = join(directory, "socket");
   const peers = new Set<Socket>();
   let accepted!: () => void;
@@ -687,7 +687,7 @@ test("an expired worker schedule reports all 2000 misses and resolves only after
 });
 
 test("UDS dispatch progresses on the worker while the calling thread is synchronously blocked", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pagent-uds-worker-"));
+  const directory = await mkdtemp(join(tmpdir(), "watchling-uds-worker-"));
   let producer: UdsProducer | undefined;
   try {
     producer = await prepareUdsProducer(

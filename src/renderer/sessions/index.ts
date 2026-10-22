@@ -112,7 +112,7 @@ function copy(session: SessionSummary): HTMLButtonElement {
   button.title = `Copy session ID ${session.id}`;
   button.setAttribute("aria-label", `Copy session ID ${session.id}`);
   button.addEventListener("click", () => {
-    window.pagent.copySessionId(session.id);
+    window.watchling.copySessionId(session.id);
     button.classList.add("copied");
     button.setAttribute("aria-label", "Copied");
     setTimeout(() => {
@@ -197,10 +197,10 @@ function render(snapshot: Snapshot): void {
 const tick = setInterval(() => {
   for (const [node, since] of timers) node.textContent = elapsed(since);
 }, 1000);
-const unsubscribe = window.pagent.onSnapshot(render);
-void window.pagent.getSnapshot().then(render);
+const unsubscribe = window.watchling.onSnapshot(render);
+void window.watchling.getSnapshot().then(render);
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") window.pagent.closeSessionList();
+  if (event.key === "Escape") window.watchling.closeSessionList();
 });
 window.addEventListener(
   "pagehide",

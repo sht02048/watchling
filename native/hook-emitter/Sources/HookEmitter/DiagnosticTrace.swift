@@ -1,4 +1,4 @@
-#if PAGENT_NATIVE_TRACE
+#if WATCHLING_NATIVE_TRACE
 import Darwin
 
 struct DiagnosticTrace: Sendable {

@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "PagentHookEmitter",
+    name: "WatchlingHookEmitter",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "pagent-hook-emitter", targets: ["HookEmitter"]),
+        .executable(name: "watchling-hook-emitter", targets: ["HookEmitter"]),
     ],
     targets: [
         .target(name: "HookProtocol"),

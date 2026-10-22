@@ -23,12 +23,12 @@ type Action = {
 };
 
 const home = process.env.HOME;
-if (!home || home !== process.env.PAGENT_PROFILE_HOME)
+if (!home || home !== process.env.WATCHLING_PROFILE_HOME)
   throw new Error("The profile fixture requires an explicitly disposable HOME");
-app.setName("pagent-transport-profile");
+app.setName("watchling-transport-profile");
 protocol.registerSchemesAsPrivileged([
   {
-    scheme: "pagent",
+    scheme: "watchling",
     privileges: { standard: true, secure: true, supportFetchAPI: true },
   },
 ]);
@@ -448,8 +448,8 @@ async function drag(index: number, scheduledMs: number): Promise<void> {
     // delivers these calls through the existing authenticated pet frame.
     const delivered = traced("fixture.drag.bridge", () =>
       pet.webContents.executeJavaScript(`
-      window.pagent.setPetHit(true);
-      window.pagent.beginDrag(${JSON.stringify(start)});
+      window.watchling.setPetHit(true);
+      window.watchling.beginDrag(${JSON.stringify(start)});
     `),
     );
     delivered.catch((error: unknown) => {
@@ -467,7 +467,7 @@ async function drag(index: number, scheduledMs: number): Promise<void> {
     result.passed = moved && result.latencyMs <= budget;
     if (!moved) result.error = "No native bounds change before drag deadline";
     void pet.webContents
-      .executeJavaScript("window.pagent.endDrag()")
+      .executeJavaScript("window.watchling.endDrag()")
       .catch((error: unknown) => {
         violations.add(`Drag end delivery failed: ${String(error)}`);
       });
@@ -647,7 +647,9 @@ const api = {
   },
   abort: cleanup,
 };
-Object.defineProperty(globalThis, "__pagentTransportProfile", { value: api });
+Object.defineProperty(globalThis, "__watchlingTransportProfile", {
+  value: api,
+});
 
 await runDesktop(resolveAppPaths(home).userData, {
   trace: trace.begin,

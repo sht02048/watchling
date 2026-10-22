@@ -6,11 +6,11 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
-const bundle = resolve("build/unfused/mac-arm64/pagent.app");
-const executable = join(bundle, "Contents/MacOS/pagent");
+const bundle = resolve("build/unfused/mac-arm64/Watchling.app");
+const executable = join(bundle, "Contents/MacOS/Watchling");
 const output = resolve("build/verification", `drive-${Date.now()}`);
-const home = await mkdtemp(join(tmpdir(), "pagent-drive-"));
-const project = "/private/tmp/pagent-drive-project";
+const home = await mkdtemp(join(tmpdir(), "watchling-drive-"));
+const project = "/private/tmp/watchling-drive-project";
 
 async function hooks(...args) {
   const { stdout } = await execute(executable, ["hooks", ...args], {
@@ -25,7 +25,7 @@ function installedCommands(settings) {
   for (const [event, groups] of Object.entries(settings.hooks ?? {}))
     for (const group of groups)
       for (const handler of group.hooks ?? [])
-        if (handler.command?.includes("pagent-hook-emitter"))
+        if (handler.command?.includes("watchling-hook-emitter"))
           commands.set(event, handler.command);
   return commands;
 }
@@ -47,7 +47,7 @@ function runHook(command, payload, env = {}) {
 }
 
 const session = (id) => ({ session_id: id, cwd: project });
-const bash = { command: "echo pagent-drive" };
+const bash = { command: "echo watchling-drive" };
 const steps = [
   {
     name: "session start",
@@ -104,7 +104,7 @@ const steps = [
       hook_event_name: "PostToolUse",
       tool_name: "Agent",
       tool_use_id: "toolu_drive_agent",
-      tool_input: { prompt: "pagent drive" },
+      tool_input: { prompt: "watchling drive" },
       tool_response: { agentId: "agent-drive", status: "async_launched" },
     },
     expect: "working",
@@ -169,10 +169,10 @@ try {
   });
   const install = await hooks("install", "--apply");
   if (
-    install.pagent?.status === "failed" ||
-    install.pagent?.status === "refused"
+    install.watchling?.status === "failed" ||
+    install.watchling?.status === "refused"
   )
-    throw new Error(`hook install failed: ${install.pagent.reason}`);
+    throw new Error(`hook install failed: ${install.watchling.reason}`);
   const commands = installedCommands(
     JSON.parse(await readFile(join(home, ".claude", "settings.json"), "utf8")),
   );
@@ -193,13 +193,13 @@ try {
   const pet = await findWindow("/pet/");
   const list = await findWindow("/sessions/");
   await pet.waitForLoadState("domcontentloaded");
-  const snapshot = () => pet.evaluate(() => window.pagent.getSnapshot());
+  const snapshot = () => pet.evaluate(() => window.watchling.getSnapshot());
   await pet.waitForFunction(
-    async () => (await window.pagent.getSnapshot()) !== undefined,
+    async () => (await window.watchling.getSnapshot()) !== undefined,
   );
   const endpoint = join(
     home,
-    "Library/Application Support/pagent/endpoint.json",
+    "Library/Application Support/watchling/endpoint.json",
   );
   let ready = false;
   for (let attempt = 0; attempt < 50 && !ready; attempt++) {

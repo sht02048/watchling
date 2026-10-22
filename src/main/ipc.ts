@@ -12,7 +12,7 @@ export function ownsFrame(
     !window.isDestroyed() &&
     event.sender === window.webContents &&
     event.senderFrame === window.webContents.mainFrame &&
-    event.senderFrame.url === `pagent://app/${role}/index.html`
+    event.senderFrame.url === `watchling://app/${role}/index.html`
   );
 }
 
@@ -41,7 +41,7 @@ export function attachIpc(options: {
     }
     return ++messages <= 120;
   };
-  ipcMain.handle("pagent:snapshot", (event, ...args: unknown[]) => {
+  ipcMain.handle("watchling:snapshot", (event, ...args: unknown[]) => {
     if (
       args.length !== 0 ||
       !allow() ||
@@ -70,24 +70,24 @@ export function attachIpc(options: {
     ipcMain.on(channel, listener);
     listeners.push([channel, listener]);
   }
-  listen("pagent:pet-hit", "pet", (...args) => {
+  listen("watchling:pet-hit", "pet", (...args) => {
     if (args.length === 1 && typeof args[0] === "boolean") options.hit(args[0]);
   });
-  listen("pagent:drag-start", "pet", (...args) => {
+  listen("watchling:drag-start", "pet", (...args) => {
     if (args.length === 1 && isPoint(args[0])) options.beginDrag(args[0]);
   });
   for (const [channel, handler] of [
-    ["pagent:drag-end", options.endDrag],
-    ["pagent:list-open", options.openList],
+    ["watchling:drag-end", options.endDrag],
+    ["watchling:list-open", options.openList],
   ] as const) {
     listen(channel, "pet", (...args) => {
       if (args.length === 0) handler();
     });
   }
-  listen("pagent:list-close", "sessions", (...args) => {
+  listen("watchling:list-close", "sessions", (...args) => {
     if (args.length === 0) options.closeList();
   });
-  listen("pagent:copy-session-id", "sessions", (...args) => {
+  listen("watchling:copy-session-id", "sessions", (...args) => {
     const id = args[0];
     if (
       args.length === 1 &&
@@ -97,7 +97,7 @@ export function attachIpc(options: {
       options.copy(id);
   });
   return () => {
-    ipcMain.removeHandler("pagent:snapshot");
+    ipcMain.removeHandler("watchling:snapshot");
     for (const [channel, listener] of listeners)
       ipcMain.removeListener(channel, listener);
   };

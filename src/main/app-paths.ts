@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, normalize } from "node:path";
 
 export function resolveAppPaths(home = homedir()) {
   if (!isAbsolute(home)) throw new TypeError("Home directory must be absolute");
-  const userData = join(home, "Library", "Application Support", "pagent");
+  const userData = join(home, "Library", "Application Support", "watchling");
   return {
     userData,
     settingsPath: join(home, ".claude", "settings.json"),

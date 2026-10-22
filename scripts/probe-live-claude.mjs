@@ -31,11 +31,11 @@ if (
 const execute = promisify(execFile);
 const interactive = authorization === "--authorized-live-interactive-probe";
 const binary = resolve(
-  "build/release/mac-arm64/pagent.app/Contents/MacOS/pagent",
+  "build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
 );
 const claude = await realpath(join(homedir(), ".local/bin/claude"));
 const sessionId = randomUUID();
-const directory = await mkdtemp(join(tmpdir(), "pagent-live-probe-"));
+const directory = await mkdtemp(join(tmpdir(), "watchling-live-probe-"));
 const records = [],
   aliases = new Map();
 let collector,
@@ -190,14 +190,14 @@ async function interactiveProbe(args) {
   }
 }
 try {
-  if ((await cli("check")).pagent.status !== "not-installed")
+  if ((await cli("check")).watchling.status !== "not-installed")
     throw new Error("An installation already exists");
   digestBefore = await digest();
   evidence.claudeVersion = (
     await execute(claude, ["--version"], { timeout: 10000, maxBuffer: 4096 })
   ).stdout.trim();
   collector = await startCollector({
-    directory: join(homedir(), "Library/Application Support/pagent"),
+    directory: join(homedir(), "Library/Application Support/watchling"),
     onEvent(event, identity) {
       if (event.sessionId !== sessionId) return;
       if (records.length >= 128) {
@@ -220,7 +220,7 @@ try {
   await cli("install", "--apply");
   const prompt =
     tool === "Bash"
-      ? `Request Bash exactly once with command: ${interactive ? `printf approved > ${quoteHookArgument(join(directory, "approved"))}; sleep 2; printf pagent-live-probe` : "printf pagent-live-probe"}. After the result or denial, stop.`
+      ? `Request Bash exactly once with command: ${interactive ? `printf approved > ${quoteHookArgument(join(directory, "approved"))}; sleep 2; printf watchling-live-probe` : "printf watchling-live-probe"}. After the result or denial, stop.`
       : "Invoke AskUserQuestion exactly once: one question 'Choose a probe option', header 'Probe', options Alpha (first probe option) and Beta (second probe option), multiSelect false. Do not ask in plain prose. After the result or denial, stop.";
   try {
     const args = [
@@ -283,7 +283,7 @@ try {
     try {
       await cli("uninstall", "--apply");
       evidence.hooksRemoved =
-        (await cli("check")).pagent.status === "not-installed";
+        (await cli("check")).watchling.status === "not-installed";
     } catch {
       failed = true;
       evidence.cleanupFailed = true;

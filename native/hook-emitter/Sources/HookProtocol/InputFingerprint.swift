@@ -136,7 +136,7 @@ public enum InputFingerprint {
     public static func key(token: String) -> Data? {
         guard let tokenBytes = bytes(hex: token) else { return nil }
         let derived = HMAC<SHA256>.authenticationCode(
-            for: Array("pagent-fingerprint-v1".utf8), using: SymmetricKey(data: tokenBytes)
+            for: Array("watchling-fingerprint-v1".utf8), using: SymmetricKey(data: tokenBytes)
         )
         return Data(derived)
     }

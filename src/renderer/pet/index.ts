@@ -13,22 +13,22 @@ function render(snapshot: Snapshot): void {
   pet.setCompanions(snapshot.companions);
   canvas!.setAttribute(
     "aria-label",
-    `pagent ${stateLabels[snapshot.state]}. Click to see sessions`,
+    `Peep ${stateLabels[snapshot.state]}. Click to see sessions`,
   );
 }
-const unsubscribeSnapshot = window.pagent.onSnapshot(render);
-const unsubscribeCursor = window.pagent.onCursor((point) => {
+const unsubscribeSnapshot = window.watchling.onSnapshot(render);
+const unsubscribeCursor = window.watchling.onCursor((point) => {
   const next = pet.hitTest(point.x, point.y);
   if (next !== hit) {
     hit = next;
-    window.pagent.setPetHit(hit);
+    window.watchling.setPetHit(hit);
   }
 });
-void window.pagent.getSnapshot().then(render);
+void window.watchling.getSnapshot().then(render);
 canvas.addEventListener("pointerdown", (event) => {
   if (event.button !== 0 || !pet.hitTest(event.offsetX, event.offsetY)) return;
   hit = true;
-  window.pagent.setPetHit(true);
+  window.watchling.setPetHit(true);
   pointer = {
     id: event.pointerId,
     x: event.screenX,
@@ -36,7 +36,7 @@ canvas.addEventListener("pointerdown", (event) => {
     moved: false,
   };
   canvas.setPointerCapture(event.pointerId);
-  window.pagent.beginDrag({ x: event.screenX, y: event.screenY });
+  window.watchling.beginDrag({ x: event.screenX, y: event.screenY });
 });
 canvas.addEventListener("pointermove", (event) => {
   if (!pointer || pointer.id !== event.pointerId) return;
@@ -54,10 +54,10 @@ function finish(event: PointerEvent, cancelled: boolean): void {
     !cancelled &&
     Math.hypot(event.screenX - pointer.x, event.screenY - pointer.y) < 5;
   pointer = undefined;
-  window.pagent.endDrag();
+  window.watchling.endDrag();
   if (canvas!.hasPointerCapture(event.pointerId))
     canvas!.releasePointerCapture(event.pointerId);
-  if (click) window.pagent.openSessionList();
+  if (click) window.watchling.openSessionList();
 }
 canvas.addEventListener("pointerup", (event) => finish(event, false));
 canvas.addEventListener("pointercancel", (event) => finish(event, true));
@@ -65,7 +65,7 @@ canvas.addEventListener("lostpointercapture", (event) => finish(event, true));
 window.addEventListener(
   "pagehide",
   () => {
-    window.pagent.endDrag();
+    window.watchling.endDrag();
     unsubscribeSnapshot();
     unsubscribeCursor();
     pet.destroy();
