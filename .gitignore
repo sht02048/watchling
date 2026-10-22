@@ -7,3 +7,6 @@ build/
 native/hook-emitter/.build/
 native/hook-emitter/.swiftpm/
 .omc/
+
+.DS_Store
+llm-wiki/
