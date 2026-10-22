@@ -8,6 +8,7 @@ import {
   session,
   Tray,
 } from "electron";
+import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,6 +57,7 @@ const csp =
   "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 let pet: BrowserWindow | undefined;
 let list: BrowserWindow | undefined;
+let rendererWatcher: FSWatcher | undefined;
 let tray: Tray | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
 let dragTimer: ReturnType<typeof setInterval> | undefined;
@@ -400,6 +402,18 @@ async function start(options: DesktopOptions): Promise<void> {
       finishTrace?.();
     }
   }, 50);
+  if (process.env.PAGENT_DEV === "1" && !app.isPackaged) {
+    let pending: ReturnType<typeof setTimeout> | undefined;
+    rendererWatcher = watch(join(root, "renderer"), { recursive: true }, () => {
+      clearTimeout(pending);
+      pending = setTimeout(() => {
+        console.log("[dev] renderer reloaded");
+        for (const window of [pet, list])
+          if (window && !window.isDestroyed())
+            window.webContents.reloadIgnoringCache();
+      }, 150);
+    });
+  }
   if (!quitting) showPet();
   options.onStarted?.({
     collector,
@@ -429,6 +443,7 @@ export async function runDesktop(
         await startup;
         endDrag();
         if (timer) clearInterval(timer);
+        rendererWatcher?.close();
         publisher?.cancel();
         detachIpc?.();
         if (app.isReady()) {
