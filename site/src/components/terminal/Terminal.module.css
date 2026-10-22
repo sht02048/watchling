@@ -88,6 +88,7 @@
 .prompt {
   flex: none;
   padding-top: 10px;
+  overflow: clip;
 }
 .input {
   display: flex;
