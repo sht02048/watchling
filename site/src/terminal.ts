@@ -63,6 +63,8 @@ const typing = (target: EventTarget | null) =>
     target.isContentEditable ||
     target.closest(".dropdown") !== null);
 
+const coarse = matchMedia("(pointer: coarse)");
+
 const dropdownOpen = () =>
   document.querySelector(".dropdown:not([hidden])") !== null;
 
@@ -264,8 +266,11 @@ export function createTerminalView(
     }
     scroll.scrollTop = scroll.scrollHeight;
     const kind = terminal.prompt.kind;
-    footer.textContent =
-      kind === "menu"
+    footer.textContent = coarse.matches
+      ? kind === "busy"
+        ? "? for shortcuts"
+        : "Tap to choose"
+      : kind === "menu"
         ? "↑↓ to move · Enter to choose"
         : kind === "permission"
           ? "←→ to move · Enter to choose"

@@ -931,6 +931,12 @@ button.light::before {
   body {
     overflow: auto;
   }
+  body:has(.desktop[data-mode="real"]) {
+    background: oklch(77% 0.075 245);
+  }
+  body:has(.desktop[data-mode="toy"]) {
+    background: #f7dcc8;
+  }
   .desktop.compact {
     position: static;
     display: block;
@@ -955,7 +961,8 @@ button.light::before {
   }
   .compact .headline {
     position: static;
-    margin: 4px 0 18px;
+    order: 1;
+    margin: 4px 0 20px;
   }
   .compact .headline-title {
     font-size: 32px;
@@ -965,17 +972,20 @@ button.light::before {
   }
   .compact .stage {
     position: relative;
-    z-index: 2;
+    z-index: var(--z-pet);
+    order: 4;
     display: flex;
     justify-content: flex-end;
-    margin-top: -36px;
+    margin-top: -72px;
     padding-inline-end: 4px;
+    pointer-events: none;
   }
   .compact .peep {
     position: relative;
     flex: none;
-    width: 124px;
-    height: 124px;
+    width: 112px;
+    height: 112px;
+    pointer-events: auto;
   }
   .compact .window {
     position: relative;
@@ -983,14 +993,25 @@ button.light::before {
     max-height: none;
   }
   .compact .terminal {
-    height: min(620px, 80dvh);
+    order: 3;
+    height: auto;
+  }
+  .compact .term {
+    padding-inline: 14px;
+    font-size: 13px;
+  }
+  .compact .term-scroll {
+    flex: none;
+    max-height: 46dvh;
   }
   .compact .states {
     position: relative;
+    order: 5;
     width: auto;
-    margin-top: 12px;
+    margin-top: 0;
   }
   .compact .sessions-window {
+    order: 6;
     margin-top: 16px;
   }
 }
