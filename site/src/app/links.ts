@@ -1,2 +1,3 @@
-export const DOWNLOAD =
-  "https://github.com/sht02048/watchling/releases/latest/download/Watchling.dmg";
+export const REPO = "https://github.com/sht02048/watchling";
+
+export const DOWNLOAD = `${REPO}/releases/latest/download/Watchling.dmg`;
