@@ -95,14 +95,14 @@ export function Desktop({
     }
     const all = parts();
     if (!all) return;
-    layoutDesktop(all, config.peepSize);
+    layoutDesktop(all, config.desktopPeepSize);
     const onResize = () => {
-      layoutDesktop(all, config.peepSize);
+      layoutDesktop(all, config.desktopPeepSize);
       keepWithin(all.sessions, all.screen);
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [compact, config.peepSize]);
+  }, [compact, config.peepSize, config.desktopPeepSize]);
 
   useLayoutEffect(() => {
     if (!sessions.open || compact) return;

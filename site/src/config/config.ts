@@ -6,6 +6,7 @@ export interface Config {
   typeSpeed: number;
   agentDurations: [number, number];
   peepSize: number;
+  desktopPeepSize: number;
   wallpaperHue: number;
 }
 
@@ -18,6 +19,7 @@ const ranges: Record<
   typeSpeed: { min: 80, max: 1200, step: 20 },
   agentDuration: { min: 1, max: 20, step: 0.5 },
   peepSize: { min: 140, max: 300, step: 2 },
+  desktopPeepSize: { min: 140, max: 320, step: 2 },
   wallpaperHue: { min: 0, max: 360, step: 1 },
 };
 
