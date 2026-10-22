@@ -6,18 +6,32 @@ import {
   type Snapshot,
 } from "../../src/shared/ui-contract.ts";
 
-export type Task = "run" | "agents";
-export type LineKind = "user" | "tool" | "result" | "text" | "done";
+export const choices = [
+  { id: "work", label: "Work on a task", state: "working" },
+  { id: "ask", label: "Ask for permission", state: "asking" },
+  { id: "agents", label: "Run background agents", state: "background" },
+  { id: "disconnect", label: "Lose the connection", state: "unknown" },
+] as const satisfies readonly {
+  id: string;
+  label: string;
+  state: SemanticState;
+}[];
+export type Choice = (typeof choices)[number]["id"];
+export type LineKind = "user" | "tool" | "result" | "text" | "done" | "peep";
 
 export interface Line {
   kind: LineKind;
   text: string;
   tool?: string;
+  state?: SemanticState;
 }
 
 export type Prompt =
-  | { kind: "tasks"; tasks: readonly Task[] }
+  | { kind: "menu" }
   | { kind: "permission"; tool: string; command: string }
+  | { kind: "reconnect" }
+  | { kind: "agents" }
+  | { kind: "task" }
   | { kind: "busy" };
 
 export interface Terminal {
@@ -33,40 +47,50 @@ export interface Terminal {
 
 export interface Timing {
   typeSpeed: number;
-  permissionDelay: number;
   agentDurations: readonly [number, number];
 }
-
-type Moment =
-  "start" | "done" | "denied" | "agents-done" | "reconnected" | "other";
 
 const SESSION = {
   project: "pocket-notes",
   sessionId: "3f9c2e1a-7b40-4d1e-9a61-0c5d2b8e4f17",
 };
-const TASKS: readonly Task[] = ["run", "agents"];
 
-const RUN_LINES: Line[] = [
-  { kind: "user", text: "Fix the flaky date test in utils" },
-  { kind: "tool", text: "Read(src/utils/date.ts)", tool: "Read" },
-  { kind: "result", text: "Read 48 lines" },
-  { kind: "tool", text: "Read(src/utils/date.test.ts)", tool: "Read" },
-  { kind: "result", text: "Read 31 lines" },
-  { kind: "text", text: "The test depends on the local timezone. Pinning it." },
-  { kind: "tool", text: "Edit(src/utils/date.test.ts)", tool: "Edit" },
-  { kind: "result", text: "Updated with 2 additions and 1 removal" },
+const peep = (text: string, state: SemanticState): Line => ({
+  kind: "peep",
+  text,
+  state,
+});
+
+const WORK_LINES: Line[] = [
+  { kind: "user", text: "Add a search box to the notes list" },
+  peep("Claude is working, so I turned orange and got busy too.", "working"),
+  { kind: "tool", text: "Read(src/notes/NoteList.ts)", tool: "Read" },
+  { kind: "result", text: "Read 64 lines" },
+  { kind: "tool", text: "Edit(src/notes/NoteList.ts)", tool: "Edit" },
+  { kind: "result", text: "Updated with 18 additions and 2 removals" },
+  { kind: "text", text: "Wiring the filter into the list next." },
+];
+const FINISHED_LINES: Line[] = [
+  { kind: "tool", text: "Bash(pnpm test notes)", tool: "Bash" },
+  { kind: "result", text: "12 passed (0.8s)" },
+  { kind: "done", text: "Added a search box that filters notes as you type." },
+  peep("Claude finished, so I'm back to idle.", "idle"),
+];
+const ASK_LINES: Line[] = [
+  { kind: "user", text: "Make sure the date tests pass" },
+  { kind: "text", text: "I'll run the test suite." },
 ];
 const APPROVED_LINES: Line[] = [
   { kind: "tool", text: "Bash(pnpm test)", tool: "Bash" },
   { kind: "result", text: "24 passed (1.2s)" },
   { kind: "done", text: "Fixed. The date test now pins UTC and passes." },
+  peep("You answered, so I calmed down. Back to idle.", "idle"),
 ];
 const DENIED_LINES: Line[] = [
-  { kind: "result", text: "Not run" },
-  {
-    kind: "done",
-    text: "Okay, I won't run the tests. What should I try next?",
-  },
+  { kind: "tool", text: "Bash(pnpm test)", tool: "Bash" },
+  { kind: "result", text: "Denied by you" },
+  { kind: "done", text: "Okay, I won't run the tests. What should I try?" },
+  peep("Nothing ran. I'm idle until Claude gets something new.", "idle"),
 ];
 const AGENT_LINES: Line[] = [
   {
@@ -79,8 +103,8 @@ const AGENT_LINES: Line[] = [
   { kind: "result", text: "Running in the background" },
   { kind: "text", text: "Both agents are on it. I'll report back." },
 ];
+const TASK_SECONDS = 5;
 const AGENT_NAMES = ["Review the docs", "Audit dependencies"];
-
 const rank = (state: SemanticState) => semanticStates.indexOf(state);
 
 export function overallState(states: readonly SemanticState[]): SemanticState {
@@ -91,50 +115,50 @@ export function overallState(states: readonly SemanticState[]): SemanticState {
 }
 
 export function createDemo(options: {
-  pointer: string;
   timing: () => Timing;
   onChange: () => void;
 }) {
   const timers = new Set<ReturnType<typeof setTimeout>>();
-  const terminals: Terminal[] = [
-    {
-      id: 1,
-      ...SESSION,
-      state: "idle",
-      since: Date.now(),
-      detail: null,
-      lines: [],
-      prompt: { kind: "tasks", tasks: TASKS },
-    },
-  ];
+  const terminal: Terminal = {
+    id: 1,
+    ...SESSION,
+    state: "idle",
+    since: Date.now(),
+    detail: null,
+    lines: [
+      peep(
+        "I'm Peep from Watchling. I sit on your desktop and watch your Claude Code sessions. Pick something for Claude to do.",
+        "idle",
+      ),
+    ],
+    prompt: { kind: "menu" },
+  };
   let connected = true;
-  let moment: Moment = "start";
   let destroyed = false;
 
-  function later(seconds: number, action: () => void): void {
+  let agentTimers: ReturnType<typeof setTimeout>[] = [];
+  let taskTimer: ReturnType<typeof setTimeout> | undefined;
+  let agentsLeft: string[] = [];
+
+  function later(
+    seconds: number,
+    action: () => void,
+  ): ReturnType<typeof setTimeout> {
     const timer = setTimeout(() => {
       timers.delete(timer);
       if (!destroyed) action();
     }, seconds * 1000);
     timers.add(timer);
+    return timer;
   }
 
-  function set(
-    terminal: Terminal,
-    state: SemanticState,
-    detail: SessionDetail | null,
-  ): void {
+  function set(state: SemanticState, detail: SessionDetail | null): void {
     if (terminal.state !== state) terminal.since = Date.now();
     terminal.state = state;
     terminal.detail = detail;
   }
 
-  function changed(next: Moment = "other"): void {
-    moment = next;
-    options.onChange();
-  }
-
-  function stream(terminal: Terminal, lines: Line[], then: () => void): void {
+  function stream(lines: Line[], then: () => void): void {
     const step = options.timing().typeSpeed / 1000;
     const push = (index: number) => {
       const line = lines[index];
@@ -142,152 +166,185 @@ export function createDemo(options: {
       terminal.lines.push(line);
       if (line.tool && terminal.state === "working")
         terminal.detail = { kind: "tool", tool: line.tool };
-      changed();
+      options.onChange();
       if (step <= 0) push(index + 1);
       else later(step, () => push(index + 1));
     };
     push(0);
   }
 
-  function idle(terminal: Terminal, next: Moment): void {
-    set(terminal, "idle", null);
-    terminal.prompt = { kind: "tasks", tasks: TASKS };
-    changed(next);
+  function ready(): void {
+    set("idle", null);
+    terminal.prompt = connected ? { kind: "menu" } : { kind: "reconnect" };
+    options.onChange();
   }
 
-  function run(terminal: Terminal): void {
+  function work(): void {
     const started = Date.now();
-    terminal.prompt = { kind: "busy" };
-    set(terminal, "working", { kind: "tool", tool: "Read" });
-    stream(terminal, RUN_LINES, () => {
-      const wait =
-        options.timing().permissionDelay - (Date.now() - started) / 1000;
-      later(Math.max(0, wait), () => {
-        terminal.prompt = {
-          kind: "permission",
-          tool: "Bash",
-          command: "pnpm test",
-        };
-        set(terminal, "asking", { kind: "permission", tool: "Bash" });
-        changed();
-      });
+    set("working", { kind: "tool", tool: "Read" });
+    stream(WORK_LINES, () => {
+      terminal.prompt = { kind: "task" };
+      options.onChange();
+      const left = TASK_SECONDS - (Date.now() - started) / 1000;
+      taskTimer = later(Math.max(0, left), finishTask);
     });
   }
 
-  function startAgents(terminal: Terminal): void {
+  function finishTask(): void {
+    if (terminal.prompt.kind !== "task") return;
+    if (taskTimer !== undefined) {
+      clearTimeout(taskTimer);
+      timers.delete(taskTimer);
+      taskTimer = undefined;
+    }
     terminal.prompt = { kind: "busy" };
-    set(terminal, "working", { kind: "tool", tool: "Task" });
-    stream(terminal, AGENT_LINES, () => {
-      set(terminal, "background", { kind: "agents", count: 2 });
-      changed();
-      const durations = [...options.timing().agentDurations].sort(
-        (a, b) => a - b,
+    terminal.detail = { kind: "tool", tool: "Bash" };
+    stream(FINISHED_LINES, ready);
+  }
+
+  function ask(): void {
+    set("asking", { kind: "permission", tool: "Bash" });
+    terminal.lines.push(
+      ...ASK_LINES,
+      peep(
+        "Claude needs you. I turned purple and raised a ! so you'd notice.",
+        "asking",
+      ),
+    );
+    terminal.prompt = {
+      kind: "permission",
+      tool: "Bash",
+      command: "pnpm test",
+    };
+    options.onChange();
+  }
+
+  function agents(): void {
+    set("working", { kind: "tool", tool: "Task" });
+    stream(AGENT_LINES, () => {
+      agentsLeft = [...AGENT_NAMES];
+      set("background", { kind: "agents", count: agentsLeft.length });
+      terminal.lines.push(
+        peep(
+          "The main turn is done, but 2 agents still run. They ride on my head until they finish.",
+          "background",
+        ),
       );
-      durations.forEach((duration, index) =>
-        later(duration, () => {
-          const left = durations.length - index - 1;
-          terminal.lines.push({
-            kind: left > 0 ? "result" : "done",
-            text:
-              left > 0
-                ? `Agent "${AGENT_NAMES[index]}" finished`
-                : `Agent "${AGENT_NAMES[index]}" finished. Both reports are in.`,
-          });
-          if (left > 0) {
-            set(terminal, "background", { kind: "agents", count: left });
-            changed();
-          } else idle(terminal, "agents-done");
-        }),
-      );
+      terminal.prompt = { kind: "agents" };
+      options.onChange();
+      agentTimers = [...options.timing().agentDurations]
+        .sort((a, b) => a - b)
+        .map((duration) => later(duration, agentFinished));
     });
   }
 
-  function find(id: number): Terminal | undefined {
-    return terminals.find((terminal) => terminal.id === id);
+  function agentFinished(): void {
+    const name = agentsLeft.shift();
+    if (name === undefined) return;
+    terminal.lines.push({ kind: "result", text: `Agent "${name}" finished` });
+    if (agentsLeft.length > 0) {
+      set("background", { kind: "agents", count: agentsLeft.length });
+      options.onChange();
+      return;
+    }
+    agentsDone([
+      { kind: "done", text: "Both reports are in." },
+      peep("Both agents are back, so I'm idle again.", "idle"),
+    ]);
+  }
+
+  function finishAgents(): void {
+    if (terminal.prompt.kind !== "agents") return;
+    for (const name of agentsLeft)
+      terminal.lines.push({ kind: "result", text: `Stopped agent "${name}"` });
+    agentsLeft = [];
+    agentsDone([
+      { kind: "done", text: "Stopped the background agents." },
+      peep("No agents left on my head, so I'm idle again.", "idle"),
+    ]);
+  }
+
+  function agentsDone(lines: Line[]): void {
+    for (const timer of agentTimers) {
+      clearTimeout(timer);
+      timers.delete(timer);
+    }
+    agentTimers = [];
+    terminal.prompt = { kind: "busy" };
+    set("idle", null);
+    stream(lines, ready);
+  }
+
+  function setConnected(next: boolean): void {
+    if (next === connected) return;
+    connected = next;
+    if (next) {
+      terminal.lines.push(
+        { kind: "result", text: "Reconnected to Claude Code" },
+        peep(
+          "Signals are back, so I can see Claude again. Back to idle.",
+          "idle",
+        ),
+      );
+      if (terminal.prompt.kind === "reconnect")
+        terminal.prompt = { kind: "menu" };
+    } else {
+      terminal.lines.push(
+        peep(
+          "Signals stopped, so I can't tell what Claude is doing. I turn grey instead of guessing.",
+          "unknown",
+        ),
+      );
+      if (terminal.prompt.kind === "menu")
+        terminal.prompt = { kind: "reconnect" };
+    }
+    options.onChange();
+  }
+
+  function snapshot(): Snapshot {
+    if (!connected) return { state: "unknown", sessions: [], companions: 0 };
+    return {
+      state: overallState([terminal.state]),
+      sessions: [
+        {
+          id: terminal.sessionId,
+          shortId: terminal.sessionId.slice(0, 8),
+          project: terminal.project,
+          state: terminal.state,
+          since: terminal.since,
+          detail: terminal.detail,
+        } satisfies SessionSummary,
+      ],
+      companions:
+        terminal.state === "background" && terminal.detail?.kind === "agents"
+          ? terminal.detail.count
+          : 0,
+    };
   }
 
   return {
-    terminals,
+    terminal,
     get connected() {
       return connected;
     },
-    start(id: number, task: Task): void {
-      const terminal = find(id);
-      if (!terminal || terminal.prompt.kind !== "tasks") return;
-      if (task === "run") run(terminal);
-      else startAgents(terminal);
-    },
-    answer(id: number, allow: boolean): void {
-      const terminal = find(id);
-      if (!terminal || terminal.prompt.kind !== "permission") return;
+    choose(choice: Choice): void {
+      if (terminal.prompt.kind !== "menu") return;
+      if (choice === "disconnect") return setConnected(false);
       terminal.prompt = { kind: "busy" };
-      if (allow) {
-        set(terminal, "working", { kind: "tool", tool: "Bash" });
-        stream(terminal, APPROVED_LINES, () => idle(terminal, "done"));
-      } else {
-        set(terminal, "working", null);
-        stream(terminal, DENIED_LINES, () => idle(terminal, "denied"));
-      }
+      if (choice === "work") work();
+      else if (choice === "ask") ask();
+      else agents();
     },
-    setConnected(next: boolean): void {
-      if (next === connected) return;
-      connected = next;
-      changed(next ? "reconnected" : "other");
+    answer(allow: boolean): void {
+      if (terminal.prompt.kind !== "permission") return;
+      terminal.prompt = { kind: "busy" };
+      set("working", allow ? { kind: "tool", tool: "Bash" } : null);
+      stream(allow ? APPROVED_LINES : DENIED_LINES, ready);
     },
-    snapshot(): Snapshot {
-      if (!connected) return { state: "unknown", sessions: [], companions: 0 };
-      const sessions: SessionSummary[] = terminals.map((terminal) => ({
-        id: terminal.sessionId,
-        shortId: terminal.sessionId.slice(0, 8),
-        project: terminal.project,
-        state: terminal.state,
-        since: terminal.since,
-        detail: terminal.detail,
-      }));
-      return {
-        state: overallState(sessions.map((session) => session.state)),
-        sessions,
-        companions: terminals.reduce(
-          (sum, terminal) =>
-            sum +
-            (terminal.state === "background" &&
-            terminal.detail?.kind === "agents"
-              ? terminal.detail.count
-              : 0),
-          0,
-        ),
-      };
-    },
-    bubble(): string {
-      const snapshot = this.snapshot();
-      switch (snapshot.state) {
-        case "unknown":
-          return "I lost track of your sessions.";
-        case "asking":
-          return "Claude needs you in the terminal.";
-        case "working":
-          return "Claude is busy in the terminal. I'll keep watch.";
-        case "background":
-          return snapshot.companions === 1
-            ? "One agent left. It's riding on my head."
-            : `${snapshot.companions} agents are working in the background. They ride on my head.`;
-        case "idle":
-          switch (moment) {
-            case "start":
-              return `I'm Peep from Watchling. I sit on your desktop and watch your Claude Code sessions. Try Run task ${options.pointer}`;
-            case "done":
-              return "All done. Click me to see your sessions.";
-            case "denied":
-              return "Okay, nothing ran. Claude is waiting for you.";
-            case "agents-done":
-              return "Both agents are back. All quiet now.";
-            case "reconnected":
-              return "I can see your sessions again.";
-            case "other":
-              return "All quiet. Give Claude something else to do.";
-          }
-      }
-    },
+    finishAgents,
+    finishTask,
+    setConnected,
+    snapshot,
     destroy(): void {
       destroyed = true;
       for (const timer of timers) clearTimeout(timer);

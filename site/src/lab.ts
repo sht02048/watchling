@@ -187,12 +187,10 @@ panel.append(title, body);
 body.append(
   field("Mode", modeSelect),
   numberKnob("typeSpeed", "Type speed", " ms/line"),
-  numberKnob("permissionDelay", "Permission prompt after", " s"),
   durationKnob(0),
   durationKnob(1),
   numberKnob("peepSize", "Peep max size", " px"),
   numberKnob("wallpaperHue", "Wallpaper hue", "°"),
-  numberKnob("bubbleMaxWidth", "Bubble max width", " px"),
   actions,
   status,
   el("h3", "lab-subtitle", "Recent saves"),

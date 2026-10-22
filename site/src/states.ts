@@ -21,17 +21,18 @@ const MEANING: Record<SemanticState, string> = {
   unknown: "Signals lost",
 };
 
-export function createStateStrip(compact: boolean): {
+const HOW: Record<SemanticState, string> = {
+  idle: "Shown on load",
+  working: "Pick Work on a task",
+  asking: "Pick Ask for permission",
+  background: "Pick Run background agents",
+  unknown: "Pick Lose the connection",
+};
+
+export function createStateStrip(): {
   element: HTMLElement;
   render: (current: SemanticState, found: ReadonlySet<SemanticState>) => void;
 } {
-  const how: Record<SemanticState, string> = {
-    idle: "Finish a task",
-    working: "Run a task",
-    asking: "Run a task",
-    background: "Start background agents",
-    unknown: compact ? "Turn off the connection" : "Disconnect in the menu bar",
-  };
   const element = el("section", "states");
   element.setAttribute("aria-labelledby", "states-title");
   const head = el("header", "states-head");
@@ -70,7 +71,7 @@ export function createStateStrip(compact: boolean): {
         row.classList.toggle("found", seen);
         if (state === current) row.setAttribute("aria-current", "true");
         else row.removeAttribute("aria-current");
-        hint.textContent = seen ? MEANING[state] : how[state];
+        hint.textContent = seen ? MEANING[state] : HOW[state];
         status.textContent =
           state === current ? ", now" : seen ? ", found" : ", not found yet";
       }

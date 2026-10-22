@@ -1,4 +1,37 @@
 let top = 10;
+const SVG = "http://www.w3.org/2000/svg";
+
+export function svg(
+  viewBox: string,
+  d: string,
+  className: string,
+): SVGSVGElement {
+  const root = document.createElementNS(SVG, "svg");
+  root.setAttribute("viewBox", viewBox);
+  root.setAttribute("class", className);
+  root.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG, "path");
+  path.setAttribute("d", d);
+  path.setAttribute("fill-rule", "evenodd");
+  root.append(path);
+  return root;
+}
+
+export function peepGlyph(): string {
+  const points = Array.from({ length: 144 }, (_, index) => {
+    const angle = (index / 144) * Math.PI * 2;
+    const radius =
+      7.1 *
+      (1 +
+        0.042 * Math.cos(9 * angle + 0.2) +
+        0.017 * Math.cos(7 * angle + 0.6));
+    return `${(9 + radius * Math.cos(angle)).toFixed(2)} ${(9.4 + radius * Math.sin(angle)).toFixed(2)}`;
+  });
+  const eyes = [6.4, 11.6]
+    .map((x) => `M${x - 1.15} 9.4a1.15 1.6 0 1 0 2.3 0a1.15 1.6 0 1 0 -2.3 0Z`)
+    .join("");
+  return `M${points.join("L")}Z${eyes}`;
+}
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,

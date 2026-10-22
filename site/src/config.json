@@ -1,9 +1,7 @@
 {
   "mode": "real",
   "typeSpeed": 380,
-  "permissionDelay": 3,
   "agentDurations": [4, 7],
   "peepSize": 210,
-  "wallpaperHue": 215,
-  "bubbleMaxWidth": 300
+  "wallpaperHue": 215
 }

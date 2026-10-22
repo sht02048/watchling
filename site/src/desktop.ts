@@ -17,40 +17,13 @@ import {
   el,
   keepWithin,
   moveWithin,
+  peepGlyph,
+  svg,
 } from "./windows.ts";
 
 export const RELEASES = "https://github.com/sht02048/watchling/releases/latest";
-const SVG = "http://www.w3.org/2000/svg";
 const compactQuery = "(max-width: 719px)";
 const reducedQuery = "(prefers-reduced-motion: reduce)";
-
-function svg(viewBox: string, d: string, className: string): SVGSVGElement {
-  const root = document.createElementNS(SVG, "svg");
-  root.setAttribute("viewBox", viewBox);
-  root.setAttribute("class", className);
-  root.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS(SVG, "path");
-  path.setAttribute("d", d);
-  path.setAttribute("fill-rule", "evenodd");
-  root.append(path);
-  return root;
-}
-
-function peepGlyph(): string {
-  const points = Array.from({ length: 144 }, (_, index) => {
-    const angle = (index / 144) * Math.PI * 2;
-    const radius =
-      7.1 *
-      (1 +
-        0.042 * Math.cos(9 * angle + 0.2) +
-        0.017 * Math.cos(7 * angle + 0.6));
-    return `${(9 + radius * Math.cos(angle)).toFixed(2)} ${(9.4 + radius * Math.sin(angle)).toFixed(2)}`;
-  });
-  const eyes = [6.4, 11.6]
-    .map((x) => `M${x - 1.15} 9.4a1.15 1.6 0 1 0 2.3 0a1.15 1.6 0 1 0 -2.3 0Z`)
-    .join("");
-  return `M${points.join("L")}Z${eyes}`;
-}
 
 function blobGlyph(): string {
   return "M9 2.2c1.5 0 2.4.9 2.4.9s-.4-1.3 1-2c.3 1.2-.6 2.1-.6 2.1 2.5.6 3.7 2.9 3.7 5.6 0 3.6-2.4 7-4.4 7-1 0-1.3-.5-2.1-.5s-1.1.5-2.1.5c-2 0-4.4-3.4-4.4-7 0-3.3 1.9-5.7 4.6-5.7.9 0 1.4.3 1.9.3Z";
@@ -81,7 +54,6 @@ interface Rect {
 }
 
 interface Progress {
-  hint: boolean;
   found: Set<SemanticState>;
 }
 
@@ -195,15 +167,8 @@ function buildDesktop(
   const canvas = el("canvas", "body");
   const front = el("canvas", "layer");
   peep.append(back, canvas, front);
-  const bubble = el("div", "bubble");
-  bubble.setAttribute("role", "status");
-  bubble.setAttribute("aria-live", "polite");
-  bubble.dataset.side = "right";
-  const bubbleText = el("p", "bubble-text");
-  bubble.append(bubbleText);
   const stage = el("div", "stage");
-  stage.append(bubble);
-  const states = createStateStrip(compact);
+  const states = createStateStrip();
 
   const sessionsView = createSessionsView();
   const sessionsWindow = createWindow({
@@ -216,8 +181,6 @@ function buildDesktop(
   sessionsWindow.element.hidden = true;
 
   let demo: Demo;
-  let shownText = "";
-  let perched = true;
 
   function render(): void {
     const snapshot: Snapshot = demo.snapshot();
@@ -232,30 +195,14 @@ function buildDesktop(
     terminalView.render();
     sessionsView.render(snapshot);
     states.render(snapshot.state, progress.found);
-    const checked = String(demo.connected);
-    connectItem.setAttribute("aria-checked", checked);
-    connectButton.setAttribute("aria-pressed", checked);
-    connectButton.textContent = demo.connected
-      ? "Connected to Claude Code"
-      : "Disconnected from Claude Code";
-    const text = demo.bubble();
-    if (text !== shownText) {
-      shownText = text;
-      bubbleText.textContent = text;
-      placeBubble();
-      bubble.classList.remove("enter");
-      void bubble.offsetWidth;
-      bubble.classList.add("enter");
-    }
+    connectItem.setAttribute("aria-checked", String(demo.connected));
   }
 
   demo = createDemo({
-    pointer: compact ? "↑" : "→",
     timing: () => {
       const current = getConfig();
       return {
         typeSpeed: reduced.matches ? 0 : current.typeSpeed,
-        permissionDelay: current.permissionDelay,
         agentDurations: current.agentDurations,
       };
     },
@@ -263,27 +210,22 @@ function buildDesktop(
   });
   cleanups.push(() => demo.destroy());
 
-  const terminal = demo.terminals[0]!;
+  const terminal = demo.terminal;
   const terminalView = createTerminalView(terminal, {
-    start: (task) => {
-      if (task === "run") progress.hint = false;
-      demo.start(terminal.id, task);
-    },
-    answer: (allow) => demo.answer(terminal.id, allow),
-    hint: () => progress.hint,
+    choose: (choice) => demo.choose(choice),
+    answer: (allow) => demo.answer(allow),
+    finish: () => demo.finishAgents(),
+    finishTask: () => demo.finishTask(),
+    reconnect: () => demo.setConnected(true),
+    found: () => progress.found,
   });
+  cleanups.push(() => terminalView.destroy());
   const terminalWindow = createWindow({
     title: `${terminal.project} — claude`,
     label: "Terminal",
     className: "terminal",
   });
   terminalWindow.content.append(terminalView.element);
-
-  const connectButton = el("button", "connect");
-  connectButton.type = "button";
-  connectButton.addEventListener("click", () =>
-    demo.setConnected(!demo.connected),
-  );
 
   const dockApp = el("a", "dock-app");
   dockApp.href = RELEASES;
@@ -315,7 +257,6 @@ function buildDesktop(
     states.element,
     sessionsWindow.element,
   );
-  if (compact) screen.append(connectButton);
   desktop.append(menubar, screen, dock);
   root.replaceChildren(desktop);
 
@@ -342,7 +283,6 @@ function buildDesktop(
 
   function layout(current: Config): void {
     if (compact) return;
-    perched = true;
     const W = screen.clientWidth;
     const H = screen.clientHeight;
     const colW = Math.min(440, W * 0.3);
@@ -365,7 +305,7 @@ function buildDesktop(
     setBox(states.element, colX, top + headline.offsetHeight + 32);
     setBox(
       peep,
-      colX - size * 0.16,
+      colX + colW - size * 0.8,
       states.element.offsetTop + states.element.offsetHeight + 8 - size * 0.06,
     );
     const termH = Math.max(300, H - DOCK - (current.peepSize * 0.82 + 2));
@@ -375,66 +315,6 @@ function buildDesktop(
       Math.max(16, (band - termH) / 2),
       termW,
       termH,
-    );
-    placeBubble();
-  }
-
-  function placeBubble(): void {
-    if (compact) return;
-    const p = rectOf(peep);
-    const size = p.w;
-    const term = rectOf(terminalWindow.element);
-    const panel = rectOf(states.element);
-    const hx = p.x + size / 2;
-    const hy = p.y + size * 0.45;
-    const max = getConfig().bubbleMaxWidth;
-    const rightX = p.x + size * 0.84;
-    const room = term.x - 16 - rightX;
-    let side: string;
-    let x: number;
-    let y: number;
-    if (perched && room >= 200) {
-      bubble.style.maxWidth = `${Math.round(Math.min(max, room))}px`;
-      side = "right";
-      x = rightX;
-      y = Math.max(hy - bubble.offsetHeight * 0.55, panel.y + panel.h + 8);
-    } else if (perched) {
-      bubble.style.maxWidth = `${Math.round(panel.w)}px`;
-      side = "above";
-      x = panel.x;
-      y = p.y + size * 0.06 - bubble.offsetHeight - 8;
-    } else {
-      bubble.style.maxWidth = `${max}px`;
-      const w = bubble.offsetWidth;
-      const h = bubble.offsetHeight;
-      const choice = pick(
-        [
-          { x: rightX, y: hy - h * 0.55, w, h, side: "right" },
-          { x: p.x + size * 0.16 - w, y: hy - h * 0.55, w, h, side: "left" },
-          { x: hx - w / 2, y: p.y + size * 0.1 - h, w, h, side: "above" },
-          { x: hx - w / 2, y: p.y + size * 0.86, w, h, side: "below" },
-        ],
-        [term, panel, rectOf(headline), dockRect()],
-        screen,
-      );
-      side = choice.side;
-      x = choice.x;
-      y = choice.y;
-    }
-    const w = bubble.offsetWidth;
-    const h = bubble.offsetHeight;
-    x = clamp(x, 8, screen.clientWidth - w - 8);
-    y = clamp(y, 8, screen.clientHeight - h - 8);
-    bubble.dataset.side = side;
-    bubble.style.left = `${Math.round(x)}px`;
-    bubble.style.top = `${Math.round(y)}px`;
-    bubble.style.setProperty(
-      "--tail",
-      `${Math.round(
-        side === "left" || side === "right"
-          ? clamp(hy - y, 18, h - 18)
-          : clamp(hx - x, 22, w - 22),
-      )}px`,
     );
   }
 
@@ -455,19 +335,26 @@ function buildDesktop(
     if (open && !compact) {
       bringToFront(sessionsWindow.element);
       const p = rectOf(peep);
-      const b = rectOf(bubble);
+      const body = {
+        x: p.x + p.w * 0.2,
+        y: p.y + p.h * 0.15,
+        w: p.w * 0.6,
+        h: p.h * 0.7,
+      };
       const term = rectOf(terminalWindow.element);
       const panel = rectOf(states.element);
+      sessionsWindow.element.style.width = `${Math.round(
+        clamp(body.x - panel.x - 12, 240, 312),
+      )}px`;
       const w = sessionsWindow.element.offsetWidth;
       const h = sessionsWindow.element.offsetHeight;
-      const beside = Math.min(p.x + p.w * 0.84, term.x - 16 - w);
       const choice = pick(
         [
-          { x: beside, y: b.y + b.h + 12, w, h },
-          { x: beside, y: b.y - h - 12, w, h },
+          { x: panel.x, y: panel.y + panel.h + 12, w, h },
           { x: panel.x, y: panel.y - h - 12, w, h },
+          { x: term.x - w - 12, y: body.y + body.h + 12, w, h },
         ],
-        [term, panel, rectOf(headline), b, dockRect()],
+        [term, panel, rectOf(headline), body, dockRect()],
         screen,
       );
       moveWithin(sessionsWindow.element, screen, choice.x, choice.y);
@@ -482,9 +369,6 @@ function buildDesktop(
 
   draggable(terminalWindow.element, terminalWindow.bar, screen, {
     enabled: () => !compact,
-    onMove: () => {
-      placeBubble();
-    },
   });
   draggable(sessionsWindow.element, sessionsWindow.bar, screen, {
     enabled: () => !compact,
@@ -495,10 +379,6 @@ function buildDesktop(
     canStart: (event) => {
       const box = canvas.getBoundingClientRect();
       return pet.hitTest(event.clientX - box.left, event.clientY - box.top);
-    },
-    onMove: () => {
-      perched = false;
-      placeBubble();
     },
     onClick: () => toggleSessions(),
   });
@@ -552,7 +432,6 @@ function buildDesktop(
   function apply(current: Config): void {
     desktop.dataset.mode = current.mode;
     desktop.style.setProperty("--hue", String(current.wallpaperHue));
-    desktop.style.setProperty("--bubble-max", `${current.bubbleMaxWidth}px`);
     desktop.style.setProperty("--peep-size", `${current.peepSize}px`);
   }
 
@@ -573,7 +452,6 @@ function buildDesktop(
     update(next: Config): void {
       apply(next);
       if (next.peepSize !== last.peepSize) layout(next);
-      else placeBubble();
       last = next;
     },
     destroy(): void {
@@ -587,7 +465,7 @@ export function mountSite(
   initial: Config,
 ): { update(config: Config): void; reset(): void; destroy(): void } {
   let config = initial;
-  const fresh = (): Progress => ({ hint: true, found: new Set(["idle"]) });
+  const fresh = (): Progress => ({ found: new Set(["idle"]) });
   let progress = fresh();
   const compact = matchMedia(compactQuery);
   let desktop = buildDesktop(root, () => config, compact.matches, progress);

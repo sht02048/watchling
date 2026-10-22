@@ -4,11 +4,9 @@ export type Mode = (typeof modes)[number];
 export interface Config {
   mode: Mode;
   typeSpeed: number;
-  permissionDelay: number;
   agentDurations: [number, number];
   peepSize: number;
   wallpaperHue: number;
-  bubbleMaxWidth: number;
 }
 
 export type NumberKnob = Exclude<keyof Config, "mode" | "agentDurations">;
@@ -18,11 +16,9 @@ export const ranges: Record<
   { min: number; max: number; step: number }
 > = {
   typeSpeed: { min: 80, max: 1200, step: 20 },
-  permissionDelay: { min: 0.5, max: 8, step: 0.5 },
   agentDuration: { min: 1, max: 20, step: 0.5 },
   peepSize: { min: 140, max: 300, step: 2 },
   wallpaperHue: { min: 0, max: 360, step: 1 },
-  bubbleMaxWidth: { min: 220, max: 400, step: 4 },
 };
 
 const inRange = (value: unknown, key: keyof typeof ranges): boolean => {
