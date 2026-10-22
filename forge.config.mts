@@ -15,6 +15,17 @@ const fused = process.env.WATCHLING_UNFUSED !== "1";
 const helperStage = resolve("build/helper");
 const helperName = "watchling-hook-emitter";
 
+const { APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER } = process.env;
+// Release builds sign with Developer ID and notarize; local builds stay ad-hoc signed.
+const notarize =
+  fused && APPLE_API_KEY && APPLE_API_KEY_ID && APPLE_API_ISSUER
+    ? {
+        appleApiKey: APPLE_API_KEY,
+        appleApiKeyId: APPLE_API_KEY_ID,
+        appleApiIssuer: APPLE_API_ISSUER,
+      }
+    : undefined;
+
 function installedAppRunning(): boolean {
   try {
     execFileSync("pgrep", [
@@ -38,6 +49,17 @@ const config: ForgeConfig = {
     asar: true,
     extendInfo: { LSUIElement: true },
     extraResource: [join(helperStage, "helpers")],
+    ...(notarize
+      ? {
+          osxSign: {
+            // The defaults also grant camera, microphone, location and photos.
+            optionsForFile: () => ({
+              entitlements: resolve("resources/entitlements.mac.plist"),
+            }),
+          },
+          osxNotarize: notarize,
+        }
+      : {}),
   },
   // A fixed name keeps releases/latest/download/Watchling.dmg pointing at the newest build.
   makers: [new MakerDMG({ name: "Watchling" }, ["darwin"])],
@@ -80,8 +102,9 @@ const config: ForgeConfig = {
         const helper = join(app, "Contents/Resources/helpers", helperName);
         if (((await stat(helper)).mode & 0o7777) !== 0o755)
           throw new Error("Packaged hook helper must have mode 0755");
-        // The fuses plugin re-signs before packaging rewrites Info.plist, so sign the final bundle.
-        execFileSync("codesign", ["--sign", "-", "--force", "--deep", app]);
+        // Without osxSign the fuses plugin re-signs before packaging rewrites Info.plist, so sign the final bundle.
+        if (!notarize)
+          execFileSync("codesign", ["--sign", "-", "--force", "--deep", app]);
         execFileSync("codesign", ["--verify", "--deep", "--strict", app]);
       }
     },
