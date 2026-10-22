@@ -16,7 +16,7 @@ test("translocated, mounted, nested, build, and unnormalized locations are not i
   for (const path of [
     "/private/var/folders/xy/T/AppTranslocation/0A1B/d/Watchling.app/Contents/MacOS/Watchling",
     "/Volumes/Watchling 0.1.0-arm64/Watchling.app/Contents/MacOS/Watchling",
-    "/Users/fixture/Desktop/code/watchling/build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
+    "/Users/fixture/Desktop/code/watchling/build/release/Watchling-darwin-arm64/Watchling.app/Contents/MacOS/Watchling",
     "/Applications/Tools/Watchling.app/Contents/MacOS/Watchling",
     "/Applications/Watchling/Contents/MacOS/Watchling",
     "/Applications/../Volumes/Watchling.app/Contents/MacOS/Watchling",

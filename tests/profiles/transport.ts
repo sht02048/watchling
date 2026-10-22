@@ -1702,7 +1702,7 @@ async function runOne(
       obtainedFrom: "packaged hooks install --apply",
     };
     application = await _electron.launch({
-      args: [resolve("dist/main/profile.js")],
+      args: [resolve(".vite/profile/build/profile.cjs")],
       env,
       timeout: 15_000,
     });
@@ -2307,7 +2307,7 @@ export async function runProfiles(options: {
       );
     const packageDirectory = diagnosticNative
       ? `watchling-diagnostic-darwin-${process.arch}`
-      : "unfused/mac-arm64";
+      : "unfused/Watchling-darwin-arm64";
     const executable = resolve(
       `build/${packageDirectory}/Watchling.app/Contents/MacOS/Watchling`,
     );
@@ -2353,11 +2353,11 @@ export async function runProfiles(options: {
         helperPath,
         electronExecutable,
         join(appRoot, "Resources", "app.asar"),
-        "dist/main/profile.js",
-        "dist/main/profile-driver.mjs",
-        "dist/main/profile-uds-worker.mjs",
-        "dist/renderer/pet/index.js",
-        "dist/preload/index.cjs",
+        ".vite/profile/build/profile.cjs",
+        ".vite/profile/build/profile-driver.mjs",
+        ".vite/profile/build/profile-uds-worker.mjs",
+        ".vite/profile/renderer/pet/index.html",
+        ".vite/profile/build/preload.cjs",
         "tests/profiles/main.ts",
         "tests/profiles/transport.ts",
         "tests/profiles/order.ts",

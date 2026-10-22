@@ -22,7 +22,7 @@ test("packaged hooks CLI preserves existing settings in disposable HOME", async 
   const home = await mkdtemp(join(tmpdir(), "watchling-packaged-"));
   const paths = resolveAppPaths(home);
   const executable = resolve(
-    "build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
+    "build/release/Watchling-darwin-arm64/Watchling.app/Contents/MacOS/Watchling",
   );
   const original = {
     theme: "dark",
@@ -82,7 +82,7 @@ test("packaged apply refuses symlink and nonregular settings without changing ta
   const home = await mkdtemp(join(tmpdir(), "watchling-packaged-"));
   const paths = resolveAppPaths(home);
   const executable = resolve(
-    "build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
+    "build/release/Watchling-darwin-arm64/Watchling.app/Contents/MacOS/Watchling",
   );
   const foreign = join(home, "foreign.json");
   const invoke = () =>
@@ -114,7 +114,7 @@ test("packaged app connects and relocates hooks only when launched from Applicat
     await mkdtemp(join(tmpdir(), "watchling-packaged-")),
   );
   const paths = resolveAppPaths(home);
-  const built = resolve("build/release/mac-arm64/Watchling.app");
+  const built = resolve("build/release/Watchling-darwin-arm64/Watchling.app");
   const installed = join(home, "Applications", "Watchling.app");
   const helper = (bundle: string) =>
     join(bundle, "Contents/Resources/helpers/watchling-hook-emitter");

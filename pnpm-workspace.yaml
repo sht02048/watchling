@@ -2,3 +2,8 @@ allowBuilds:
   electron: true
   esbuild: true
   electron-winstaller: false
+  fs-xattr: true
+  macos-alias: true
+
+# Electron Forge refuses to run with pnpm's isolated node_modules layout.
+nodeLinker: hoisted

@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
-const bundle = resolve("build/unfused/mac-arm64/Watchling.app");
+const bundle = resolve("build/unfused/Watchling-darwin-arm64/Watchling.app");
 const executable = join(bundle, "Contents/MacOS/Watchling");
 const output = resolve("build/verification", `drive-${Date.now()}`);
 const home = await mkdtemp(join(tmpdir(), "watchling-drive-"));

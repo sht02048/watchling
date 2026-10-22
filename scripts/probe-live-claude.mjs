@@ -31,7 +31,7 @@ if (
 const execute = promisify(execFile);
 const interactive = authorization === "--authorized-live-interactive-probe";
 const binary = resolve(
-  "build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
+  "build/release/Watchling-darwin-arm64/Watchling.app/Contents/MacOS/Watchling",
 );
 const claude = await realpath(join(homedir(), ".local/bin/claude"));
 const sessionId = randomUUID();
