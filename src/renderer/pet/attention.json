@@ -1,0 +1,16 @@
+{
+  "seed": 20261022,
+  "mode": "bubble",
+  "size": 0.46,
+  "offsetX": 0.87,
+  "height": 1.22,
+  "tilt": 0.18,
+  "popDuration": 0.45,
+  "overshoot": 0.35,
+  "interval": 6,
+  "jitter": 0.3,
+  "burstDuration": 0.7,
+  "burstStrength": 0.6,
+  "outline": 0.12,
+  "fillLightness": 0.55
+}

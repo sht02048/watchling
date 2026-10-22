@@ -6,6 +6,8 @@ import type { SemanticState } from "../../shared/ui-contract.ts";
 import { rgb, type OKLab } from "./color.ts";
 import { drawCompanions, type CompanionConfig } from "./companions.ts";
 import companionConfig from "./companions.json" with { type: "json" };
+import { drawAttention, type AttentionConfig } from "./attention.ts";
+import attentionConfig from "./attention.json" with { type: "json" };
 
 interface Pose {
   amp: number;
@@ -371,6 +373,7 @@ export function createPet(
   let body: Path2D | null = null;
   let destroyed = false;
   let companions = 0;
+  let askedAt = 0;
   const layerContexts = layers && {
     back: layers.back.getContext("2d")!,
     front: layers.front.getContext("2d")!,
@@ -400,6 +403,13 @@ export function createPet(
         companionConfig as CompanionConfig,
         companions,
         figure.t,
+        { width, height, ratio, palette: [figure.c1, figure.c2] },
+      );
+    if (layerContexts && shown === "asking")
+      drawAttention(
+        layerContexts.front,
+        attentionConfig as AttentionConfig,
+        figure.t - askedAt,
         { width, height, ratio, palette: [figure.c1, figure.c2] },
       );
   }
@@ -457,6 +467,7 @@ export function createPet(
         squash.vel = -0.75;
         params.field.vel += 1.5;
       }
+      if (state === "asking" && shown !== "asking") askedAt = figure.t;
       shown = state;
       for (const key of POSE_KEYS) params[key].target = POSES[state][key];
       for (const channel of COLOR_CHANNELS) {
