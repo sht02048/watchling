@@ -158,6 +158,26 @@ test("unstable locations never install and cannot toggle", async () => {
   });
 });
 
+test("removing hooks for an uninstall keeps preferences so a reinstall reconnects", async () => {
+  await fixture(async (f) => {
+    const { connection: value } = connection(f);
+    await value.start();
+    assert.equal(await value.removeHooks(), true);
+    assert.equal(await value.isConnected(), false);
+    assert.deepEqual(await settings(f), { theme: "kept" });
+    assert.equal(
+      (await new PreferenceStore(f.paths.userData).load()).optedOut,
+      false,
+    );
+
+    const reinstall = connection(f);
+    await reinstall.connection.start();
+    assert.equal(await reinstall.connection.isConnected(), true);
+    assert.equal(await connection(f, false).connection.removeHooks(), false);
+    assert.equal(await reinstall.connection.isConnected(), true);
+  });
+});
+
 test("turning the connection off uninstalls and keeps launches from reinstalling", async () => {
   await fixture(async (f) => {
     const { connection: value, notices } = connection(f);

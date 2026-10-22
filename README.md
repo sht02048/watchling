@@ -90,11 +90,9 @@ It adds only its own hook handlers and keeps the rest of `~/.claude/settings.jso
 
 ## Uninstall
 
-1. Untick **Connected to Claude Code** in the menu bar menu and quit Watchling.
-2. Move Watchling to the Trash.
-3. Optionally delete `~/Library/Application Support/watchling`.
+Choose **Uninstall Watchling…** in the menu bar menu. Watchling removes its hooks from `~/.claude/settings.json`, moves itself to the Trash and quits. Optionally delete `~/Library/Application Support/watchling` afterwards.
 
-If you trash the app first, Claude Code keeps working; the leftover hooks check for the helper and do nothing.
+If you trash the app first, Claude Code keeps working; the leftover hooks check for the helper and do nothing. Installing Watchling again picks them up, even if you deleted its data folder.
 
 ## Build from source
 

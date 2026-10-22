@@ -154,6 +154,20 @@ export class ClaudeConnection {
     });
   }
 
+  // Uninstalling keeps preferences, so a later reinstall connects again.
+  removeHooks(): Promise<boolean> {
+    if (!this.available) return Promise.resolve(false);
+    return this.serialize(async () => {
+      try {
+        await manageClaudeHooks("uninstall", true, this.paths, this.helperPath);
+        return true;
+      } catch (error) {
+        console.error(describe(error));
+        return false;
+      }
+    });
+  }
+
   setConnected(connected: boolean): Promise<void> {
     if (!this.available) return Promise.resolve();
     return this.serialize(async () => {

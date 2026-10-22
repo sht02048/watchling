@@ -2,12 +2,14 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  dialog,
   Menu,
   nativeImage,
   type MenuItemConstructorOptions,
   protocol,
   screen,
   session,
+  shell,
   Tray,
 } from "electron";
 import { mkdir, readFile } from "node:fs/promises";
@@ -74,7 +76,7 @@ let store: PositionStore | undefined;
 let connection:
   | Pick<
       ClaudeConnection,
-      "available" | "start" | "isConnected" | "setConnected"
+      "available" | "start" | "isConnected" | "setConnected" | "removeHooks"
     >
   | undefined;
 let connected = false;
@@ -216,9 +218,46 @@ function updateMenu(): void {
       { type: "separator" },
       item,
       { type: "separator" },
+      ...(connection?.available
+        ? [{ label: "Uninstall Watchling…", click: () => void uninstall() }]
+        : []),
       { label: "Quit", click: () => app.quit() },
     ]),
   );
+}
+
+async function uninstall(): Promise<void> {
+  app.focus({ steal: true });
+  const { response } = await dialog.showMessageBox({
+    type: "warning",
+    message: "Uninstall Watchling?",
+    detail:
+      "Watchling removes its Claude Code hooks, moves itself to the Trash and quits. Your other Claude Code settings stay as they are.",
+    buttons: ["Uninstall", "Cancel"],
+    defaultId: 1,
+    cancelId: 1,
+  });
+  if (response !== 0) return;
+  if (!(await connection?.removeHooks())) {
+    await dialog.showMessageBox({
+      type: "error",
+      message: "Watchling could not remove its Claude Code hooks",
+      detail:
+        "Nothing was moved to the Trash. Untick Connected to Claude Code, then try again.",
+    });
+    return;
+  }
+  try {
+    await shell.trashItem(dirname(dirname(dirname(process.execPath))));
+  } catch {
+    await dialog.showMessageBox({
+      type: "error",
+      message: "Watchling could not move itself to the Trash",
+      detail:
+        "Its Claude Code hooks are removed. Drag Watchling from Applications to the Trash.",
+    });
+  }
+  app.quit();
 }
 
 async function refreshConnection(): Promise<void> {
