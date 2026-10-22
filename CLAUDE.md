@@ -25,7 +25,7 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 - `src/renderer/pet/` — canvas pet, companions and the asking speech bubble. `src/renderer/sessions/` — the session list.
 - `src/playground/` — design labs; their saved JSON configs feed the real renderer.
 - `native/hook-emitter/` — Swift helper that Claude Code runs for each hook event.
-- `docs/` — design decisions: `state-model.md`, `session-list.md`, `claude-coverage.md`.
+- `docs/` — design decisions: `state-model.md`, `session-list.md`, `claude-coverage.md`, `landing-page.md`.
 
 ## Rules
 

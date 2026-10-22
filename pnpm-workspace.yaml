@@ -1,3 +1,5 @@
+packages:
+  - site
 allowBuilds:
   electron: true
   esbuild: true

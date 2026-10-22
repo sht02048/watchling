@@ -1,0 +1,60 @@
+export const modes = ["real", "toy", "dev"] as const;
+export type Mode = (typeof modes)[number];
+
+export interface Config {
+  mode: Mode;
+  typeSpeed: number;
+  permissionDelay: number;
+  agentDurations: [number, number];
+  peepSize: number;
+  wallpaperHue: number;
+  bubbleMaxWidth: number;
+}
+
+export type NumberKnob = Exclude<keyof Config, "mode" | "agentDurations">;
+
+export const ranges: Record<
+  NumberKnob | "agentDuration",
+  { min: number; max: number; step: number }
+> = {
+  typeSpeed: { min: 80, max: 1200, step: 20 },
+  permissionDelay: { min: 0.5, max: 8, step: 0.5 },
+  agentDuration: { min: 1, max: 20, step: 0.5 },
+  peepSize: { min: 140, max: 300, step: 2 },
+  wallpaperHue: { min: 0, max: 360, step: 1 },
+  bubbleMaxWidth: { min: 220, max: 400, step: 4 },
+};
+
+const inRange = (value: unknown, key: keyof typeof ranges): boolean => {
+  const { min, max, step } = ranges[key];
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= min &&
+    value <= max &&
+    (step < 1 || Number.isInteger(value))
+  );
+};
+
+export function validateConfig(value: unknown): Config | null {
+  if (value === null || typeof value !== "object") return null;
+  const config = value as Record<string, unknown>;
+  const durations = config.agentDurations;
+  const valid =
+    Object.keys(config).length === Object.keys(ranges).length + 1 &&
+    modes.includes(config.mode as Mode) &&
+    Array.isArray(durations) &&
+    durations.length === 2 &&
+    durations.every((duration) => inRange(duration, "agentDuration")) &&
+    (Object.keys(ranges) as (keyof typeof ranges)[])
+      .filter((key) => key !== "agentDuration")
+      .every((key) => inRange(config[key], key));
+  return valid ? (config as unknown as Config) : null;
+}
+
+export function formatConfig(config: Config): string {
+  return `${JSON.stringify(config, null, 2).replace(
+    /\[\s+([^\]]*?)\s+\]/g,
+    (_, items: string) => `[${items.split(/,\s+/).join(", ")}]`,
+  )}\n`;
+}

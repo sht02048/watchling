@@ -15,11 +15,13 @@
     "start": "pnpm build && electron .",
     "dev": "node scripts/dev.mjs",
     "playground": "node scripts/playground.mjs",
+    "site:dev": "pnpm --filter watchling-site dev",
+    "site:build": "pnpm --filter watchling-site build",
     "test:unit": "node --experimental-strip-types --test tests/unit/*.test.ts",
     "test:integration": "pnpm build:helper && node --experimental-strip-types --test tests/integration/*.test.ts",
     "test:packaged": "pnpm build:local-app && node --experimental-strip-types --test tests/packaged/*.test.ts",
     "test:e2e": "pnpm build && pnpm build:helper && playwright test",
-    "format": "prettier --write src scripts tests package.json tsconfig.json playwright.config.ts"
+    "format": "prettier --write src site scripts tests package.json tsconfig.json playwright.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
