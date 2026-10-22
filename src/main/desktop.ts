@@ -95,6 +95,47 @@ function updateTray(): void {
   tray.setToolTip(`Watchling — ${stateLabels[trayState]}`);
 }
 
+function insidePeep(x: number, y: number): boolean {
+  const dx = x - 9;
+  const dy = y - 9.4;
+  const angle = Math.atan2(dy, dx);
+  const radius =
+    7.1 *
+    (1 + 0.042 * Math.cos(9 * angle + 0.2) + 0.017 * Math.cos(7 * angle + 0.6));
+  if (Math.hypot(dx, dy) > radius) return false;
+  return [6.4, 11.6].every(
+    (eye) => ((x - eye) / 1.15) ** 2 + ((y - 9.4) / 1.6) ** 2 > 1,
+  );
+}
+
+function trayIcon(): Electron.NativeImage {
+  const size = 36;
+  const samples = 4;
+  const bitmap = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let hits = 0;
+      for (let sy = 0; sy < samples; sy++)
+        for (let sx = 0; sx < samples; sx++)
+          if (
+            insidePeep(
+              ((x + (sx + 0.5) / samples) * 18) / size,
+              ((y + (sy + 0.5) / samples) * 18) / size,
+            )
+          )
+            hits++;
+      bitmap[(y * size + x) * 4 + 3] = Math.round((hits / samples ** 2) * 255);
+    }
+  }
+  const icon = nativeImage.createFromBitmap(bitmap, {
+    width: size,
+    height: size,
+    scaleFactor: 2,
+  });
+  icon.setTemplateImage(true);
+  return icon;
+}
+
 function queueSnapshot(): void {
   if (!quitting) publisher?.request();
 }
@@ -366,18 +407,7 @@ async function start(options: DesktopOptions): Promise<void> {
     pet.loadURL("watchling://app/pet/index.html"),
     list.loadURL("watchling://app/sessions/index.html"),
   ]);
-  const bitmap = Buffer.alloc(18 * 18 * 4);
-  for (let y = 0; y < 18; y++) {
-    for (let x = 0; x < 18; x++) {
-      const dx = x - 8.5,
-        dy = y - 8.5;
-      const radius = 6 + Math.cos(Math.atan2(dy, dx) * 9);
-      if (Math.hypot(dx, dy) <= radius) bitmap[(y * 18 + x) * 4 + 3] = 255;
-    }
-  }
-  const icon = nativeImage.createFromBitmap(bitmap, { width: 18, height: 18 });
-  icon.setTemplateImage(true);
-  tray = new Tray(icon);
+  tray = new Tray(trayIcon());
   updateTray();
   updateMenu();
   if (connection?.available) void connection.start().then(refreshConnection);
