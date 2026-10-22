@@ -73,6 +73,8 @@ let startup: Promise<void> | undefined;
 let dragging:
   { cursor: Point; origin: Point; moved: boolean; last?: Point } | undefined;
 let hit = false;
+let listHiddenAt = 0;
+let pressClosedList = false;
 let ignoring = true;
 const observations = new Observations();
 let snapshot = observations.snapshot();
@@ -138,7 +140,17 @@ function endDrag(): void {
   updateInput();
 }
 
+function hideList(): void {
+  if (!list?.isVisible()) return;
+  list.hide();
+  listHiddenAt = performance.now();
+}
+
 function showList(): void {
+  if (pressClosedList) {
+    pressClosedList = false;
+    return;
+  }
   if (!pet || !list || dragging) return;
   const petBounds = pet.getBounds();
   const area = screen.getDisplayMatching(petBounds).workArea;
@@ -263,7 +275,7 @@ async function start(options: DesktopOptions): Promise<void> {
   configureWindow(pet);
   configureWindow(list);
   pet.setIgnoreMouseEvents(true, { forward: true });
-  list.on("blur", () => list?.hide());
+  list.on("blur", hideList);
   detachIpc = attachIpc({
     pet,
     list,
@@ -273,6 +285,9 @@ async function start(options: DesktopOptions): Promise<void> {
       updateInput();
     },
     beginDrag: (cursor) => {
+      // The list blurs on the same press, so it may already be hidden when this arrives.
+      pressClosedList =
+        !!list?.isVisible() || performance.now() - listHiddenAt < 300;
       if (!pet?.isVisible() || !hit || dragging) return;
       const bounds = pet.getBounds();
       if (
@@ -287,7 +302,7 @@ async function start(options: DesktopOptions): Promise<void> {
         () => updateDrag(screen.getCursorScreenPoint()),
         8,
       );
-      list?.hide();
+      hideList();
       updateInput();
     },
     endDrag,
