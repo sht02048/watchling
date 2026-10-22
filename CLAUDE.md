@@ -14,6 +14,7 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 | `pnpm test:packaged` | Builds the app and checks hook install/relocation in packaged form |
 | `pnpm package` | Fused, ad-hoc signed app in `build/release/Watchling-darwin-arm64/`; also refreshes `.vite/` for `electron .` |
 | `pnpm make` | `package` plus the DMG in `build/release/make/dmg/arm64/` and the unfused app for Playwright in `build/unfused/` |
+| `pnpm release` | Builds the DMG and uploads it to a draft GitHub release of `sht02048/watchling`. Needs `GITHUB_TOKEN`; publishes outside the machine, so run only when asked. |
 | `pnpm playground` | Browser labs for pet states, companions and the asking cue at http://127.0.0.1:5178/ |
 | `pnpm format` | Prettier |
 

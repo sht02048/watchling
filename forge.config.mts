@@ -6,6 +6,7 @@ import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { VitePlugin } from "@electron-forge/plugin-vite";
+import { PublisherGitHub } from "@electron-forge/publisher-github";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
 // Playwright drives Electron through --inspect, which the production fuses
@@ -39,6 +40,13 @@ const config: ForgeConfig = {
     extraResource: [join(helperStage, "helpers")],
   },
   makers: [new MakerDMG({}, ["darwin"])],
+  publishers: [
+    new PublisherGitHub({
+      repository: { owner: "sht02048", name: "watchling" },
+      draft: true,
+      generateReleaseNotes: true,
+    }),
+  ],
   hooks: {
     preStart: async () => {
       // The dev build shares the installed app's data directory and single-instance lock.
