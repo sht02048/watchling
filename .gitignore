@@ -1,6 +1,7 @@
 .gjc/
 node_modules/
 dist/
+.vite/
 test-results/
 playwright-report/
 build/

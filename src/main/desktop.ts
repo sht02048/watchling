@@ -10,10 +10,10 @@ import {
   session,
   Tray,
 } from "electron";
-import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { contentSecurityPolicy } from "../shared/csp.ts";
+import { resolveRendererAsset } from "./renderer-assets.ts";
 import {
   stateLabels,
   type Point,
@@ -51,16 +51,21 @@ export interface DesktopOptions {
   trace?: CollectorOptions["trace"];
 }
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const rendererRoot = join(dirname(__dirname), "renderer");
+const viewUrls = {
+  pet: new URL(PET_VITE_DEV_SERVER_URL ?? "watchling://app/pet/index.html")
+    .href,
+  sessions: new URL(
+    SESSIONS_VITE_DEV_SERVER_URL ?? "watchling://app/sessions/index.html",
+  ).href,
+};
 const size = { width: 180, height: 180 };
 const listSize = { width: 320, height: 280 };
 // Transparent margin around the body that may sit past the display edge.
 const petInset = 30;
-const csp =
-  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const csp = contentSecurityPolicy("'none'");
 let pet: BrowserWindow | undefined;
 let list: BrowserWindow | undefined;
-let rendererWatcher: FSWatcher | undefined;
 let tray: Tray | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
 let dragTimer: ReturnType<typeof setInterval> | undefined;
@@ -80,7 +85,8 @@ let quitFlushed = false;
 let cleanupStarted = false;
 let startup: Promise<void> | undefined;
 let dragging:
-  { cursor: Point; origin: Point; moved: boolean; last?: Point } | undefined;
+  | { cursor: Point; origin: Point; moved: boolean; last?: Point }
+  | undefined;
 let hit = false;
 let listHiddenAt = 0;
 let pressClosedList = false;
@@ -278,23 +284,13 @@ async function start(options: DesktopOptions): Promise<void> {
   );
   session.defaultSession.setPermissionCheckHandler(() => false);
   session.defaultSession.on("will-download", (event) => event.preventDefault());
-  const assets = new Map<string, { path: string; mime: string }>();
-  for (const view of ["pet", "sessions"]) {
-    for (const [file, mime] of [
-      ["index.html", "text/html"],
-      ["index.js", "text/javascript"],
-      ["style.css", "text/css"],
-    ] as const) {
-      assets.set(`watchling://app/${view}/${file}`, {
-        path: join(root, "renderer", view, file),
-        mime,
-      });
-    }
-  }
   protocol.handle("watchling", async (request) => {
-    const asset = assets.get(request.url);
-    if (request.method !== "GET" || !asset)
-      return new Response(null, { status: 404 });
+    const asset = resolveRendererAsset(
+      request.method,
+      request.url,
+      rendererRoot,
+    );
+    if (!asset) return new Response(null, { status: 404 });
     try {
       const bytes = await readFile(asset.path);
       return new Response(bytes, {
@@ -304,7 +300,9 @@ async function start(options: DesktopOptions): Promise<void> {
           "X-Content-Type-Options": "nosniff",
         },
       });
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return new Response(null, { status: 404 });
       console.error("Packaged UI asset could not be read");
       return new Response(null, { status: 500 });
     }
@@ -321,7 +319,7 @@ async function start(options: DesktopOptions): Promise<void> {
     : area;
   const position = clampWindow(initial, display, size);
   const webPreferences = {
-    preload: join(root, "preload", "index.cjs"),
+    preload: join(__dirname, "preload.cjs"),
     nodeIntegration: false,
     contextIsolation: true,
     sandbox: true,
@@ -364,6 +362,7 @@ async function start(options: DesktopOptions): Promise<void> {
   detachIpc = attachIpc({
     pet,
     list,
+    urls: viewUrls,
     snapshot: () => snapshot,
     hit: (value) => {
       hit = value;
@@ -404,8 +403,8 @@ async function start(options: DesktopOptions): Promise<void> {
     app.quit();
   });
   await Promise.all([
-    pet.loadURL("watchling://app/pet/index.html"),
-    list.loadURL("watchling://app/sessions/index.html"),
+    pet.loadURL(viewUrls.pet),
+    list.loadURL(viewUrls.sessions),
   ]);
   tray = new Tray(trayIcon());
   updateTray();
@@ -487,18 +486,6 @@ async function start(options: DesktopOptions): Promise<void> {
       finishTrace?.();
     }
   }, 50);
-  if (process.env.WATCHLING_DEV === "1" && !app.isPackaged) {
-    let pending: ReturnType<typeof setTimeout> | undefined;
-    rendererWatcher = watch(join(root, "renderer"), { recursive: true }, () => {
-      clearTimeout(pending);
-      pending = setTimeout(() => {
-        console.log("[dev] renderer reloaded");
-        for (const window of [pet, list])
-          if (window && !window.isDestroyed())
-            window.webContents.reloadIgnoringCache();
-      }, 150);
-    });
-  }
   if (!quitting) showPet();
   options.onStarted?.({
     collector,
@@ -530,7 +517,6 @@ export async function runDesktop(
         await startup;
         endDrag();
         if (timer) clearInterval(timer);
-        rendererWatcher?.close();
         publisher?.cancel();
         detachIpc?.();
         if (app.isReady()) {

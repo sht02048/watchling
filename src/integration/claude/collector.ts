@@ -36,7 +36,9 @@ import type {
 } from "./protocol.ts";
 
 export type LossReason =
-  "capacity" | "malformed-authenticated-frame" | "consumer-failed";
+  | "capacity"
+  | "malformed-authenticated-frame"
+  | "consumer-failed";
 export interface CollectorOptions {
   directory: string;
   onEvent: (

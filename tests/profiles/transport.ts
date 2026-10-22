@@ -120,7 +120,13 @@ type RendererSample = {
   renderFinishedMs?: number;
   rafObservedMs?: number;
   outcome:
-    "ok" | "hidden" | "missed" | "busy" | "error" | "timeout" | "stopped";
+    | "ok"
+    | "hidden"
+    | "missed"
+    | "busy"
+    | "error"
+    | "timeout"
+    | "stopped";
   error?: string;
 };
 type RendererFixture = { stop(): RendererSample[] };
@@ -805,7 +811,7 @@ async function captureProxy(endpoint: Endpoint, slots: Slot[]) {
     }),
     async close() {
       for (const socket of live) socket.destroy();
-      await Promise.allSettled([...pending]);
+      await Promise.allSettled(pending);
       await new Promise<void>((done) => server.close(() => done()));
       originals.clear();
       await rm(directory, { recursive: true, force: true });
@@ -820,7 +826,8 @@ function installRendererSampler(options: {
   durationMs: number;
 }): void {
   const candidate = Reflect.get(window, "__watchlingProfileRender") as
-    ((snapshot: Snapshot) => void) | undefined;
+    | ((snapshot: Snapshot) => void)
+    | undefined;
   if (typeof candidate !== "function")
     throw new Error(
       "Fixture build did not expose the production pet render function",
@@ -1702,7 +1709,7 @@ async function runOne(
       obtainedFrom: "packaged hooks install --apply",
     };
     application = await _electron.launch({
-      args: [resolve("dist/main/profile.js")],
+      args: [resolve(".vite/profile/build/profile.cjs")],
       env,
       timeout: 15_000,
     });
@@ -1713,7 +1720,8 @@ async function runOne(
         () =>
           (
             Reflect.get(globalThis, "__watchlingTransportProfile") as
-              ProfileFixture | undefined
+              | ProfileFixture
+              | undefined
           )?.ready ?? false,
       ))
     ) {
@@ -2125,11 +2133,9 @@ async function runOne(
         "Production collector left its endpoint descriptor after app shutdown",
       );
     } catch (error) {
-      if (!(
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ))
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      )
         throw error;
     }
     const off = await sequential(command, env, slots[0]!.input);
@@ -2179,7 +2185,8 @@ async function runOne(
         await application.evaluate(() =>
           (
             Reflect.get(globalThis, "__watchlingTransportProfile") as
-              ProfileFixture | undefined
+              | ProfileFixture
+              | undefined
           )?.abort(),
         );
       } catch (error) {
@@ -2307,7 +2314,7 @@ export async function runProfiles(options: {
       );
     const packageDirectory = diagnosticNative
       ? `watchling-diagnostic-darwin-${process.arch}`
-      : "unfused/mac-arm64";
+      : "unfused/Watchling-darwin-arm64";
     const executable = resolve(
       `build/${packageDirectory}/Watchling.app/Contents/MacOS/Watchling`,
     );
@@ -2353,11 +2360,11 @@ export async function runProfiles(options: {
         helperPath,
         electronExecutable,
         join(appRoot, "Resources", "app.asar"),
-        "dist/main/profile.js",
-        "dist/main/profile-driver.mjs",
-        "dist/main/profile-uds-worker.mjs",
-        "dist/renderer/pet/index.js",
-        "dist/preload/index.cjs",
+        ".vite/profile/build/profile.cjs",
+        ".vite/profile/build/profile-driver.mjs",
+        ".vite/profile/build/profile-uds-worker.mjs",
+        ".vite/profile/renderer/pet/index.html",
+        ".vite/profile/build/preload.cjs",
         "tests/profiles/main.ts",
         "tests/profiles/transport.ts",
         "tests/profiles/order.ts",

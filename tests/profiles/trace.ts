@@ -232,7 +232,8 @@ export function createProfileTrace(
       const offset = reserve(2, -1, entry.startTime);
       data[offset + 4] = entry.duration;
       const detail = Reflect.get(entry, "detail") as
-        NodeGCPerformanceDetail | undefined;
+        | NodeGCPerformanceDetail
+        | undefined;
       data[offset + 7] =
         typeof detail?.kind === "number" && Number.isFinite(detail.kind)
           ? detail.kind

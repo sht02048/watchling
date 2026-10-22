@@ -6,19 +6,20 @@ type Request = IpcMainEvent | IpcMainInvokeEvent;
 export function ownsFrame(
   event: Request,
   window: BrowserWindow,
-  role: "pet" | "sessions",
+  url: string,
 ): boolean {
   return (
     !window.isDestroyed() &&
     event.sender === window.webContents &&
     event.senderFrame === window.webContents.mainFrame &&
-    event.senderFrame.url === `watchling://app/${role}/index.html`
+    event.senderFrame.url === url
   );
 }
 
 export function attachIpc(options: {
   pet: BrowserWindow;
   list: BrowserWindow;
+  urls: { pet: string; sessions: string };
   snapshot: () => Snapshot;
   hit: (value: boolean) => void;
   beginDrag: (cursor: Point) => void;
@@ -46,8 +47,8 @@ export function attachIpc(options: {
       args.length !== 0 ||
       !allow() ||
       !(
-        ownsFrame(event, options.pet, "pet") ||
-        ownsFrame(event, options.list, "sessions")
+        ownsFrame(event, options.pet, options.urls.pet) ||
+        ownsFrame(event, options.list, options.urls.sessions)
       )
     ) {
       throw new Error("Unauthorized snapshot request");
@@ -61,7 +62,11 @@ export function attachIpc(options: {
   ): void {
     const listener = (event: IpcMainEvent, ...args: unknown[]): void => {
       if (
-        !ownsFrame(event, role === "pet" ? options.pet : options.list, role) ||
+        !ownsFrame(
+          event,
+          role === "pet" ? options.pet : options.list,
+          options.urls[role],
+        ) ||
         !allow()
       )
         return;

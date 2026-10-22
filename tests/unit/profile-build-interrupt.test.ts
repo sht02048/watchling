@@ -19,7 +19,7 @@ for (const phase of ["before-helper", "copy-bundle"] as const) {
       // Run the actual entrypoint with fixture-only I/O dependencies. No build,
       // application, settings mutation or actual profile is launched here.
       for (const [original, replacement] of [
-        ['from "esbuild"', 'from "./build.mjs"'],
+        ['from "vite"', 'from "./build.mjs"'],
         ['from "node:child_process"', 'from "./child.mjs"'],
         ['from "node:fs/promises"', 'from "./fs.mjs"'],
       ]) {
@@ -30,7 +30,6 @@ for (const phase of ["before-helper", "copy-bundle"] as const) {
       await writeFile(
         join(directory, "build.mjs"),
         `
-export function stop() {}
 export async function build() { console.log('UNEXPECTED_BUILD'); throw new Error('Continued after interrupt'); }
 `,
       );

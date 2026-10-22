@@ -68,7 +68,7 @@ test("auto-connect runs only for a packaged app in an Applications folder", () =
   for (const path of [
     "/Volumes/Watchling 0.1.0-arm64/Watchling.app/Contents/MacOS/Watchling",
     "/private/var/folders/xy/T/AppTranslocation/0A1B/d/Watchling.app/Contents/MacOS/Watchling",
-    "/Users/fixture/code/watchling/build/release/mac-arm64/Watchling.app/Contents/MacOS/Watchling",
+    "/Users/fixture/code/watchling/build/release/Watchling-darwin-arm64/Watchling.app/Contents/MacOS/Watchling",
     "/Users/fixture/code/watchling/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
   ])
     assert.equal(canAutoConnect(true, path, home), false, path);
