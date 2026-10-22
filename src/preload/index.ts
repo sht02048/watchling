@@ -32,5 +32,8 @@ const bridge: PetBridge = Object.freeze({
   endDrag: () => ipcRenderer.send("pagent:drag-end"),
   openSessionList: () => ipcRenderer.send("pagent:list-open"),
   closeSessionList: () => ipcRenderer.send("pagent:list-close"),
+  copySessionId: (id: string) => {
+    if (typeof id === "string") ipcRenderer.send("pagent:copy-session-id", id);
+  },
 });
 contextBridge.exposeInMainWorld("pagent", bridge);

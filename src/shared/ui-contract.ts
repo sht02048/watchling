@@ -14,17 +14,24 @@ export const stateLabels: Record<SemanticState, string> = {
   asking: "Asking",
 };
 
+export type SessionDetail =
+  | { kind: "permission"; tool?: string }
+  | { kind: "question" }
+  | { kind: "tool"; tool: string }
+  | { kind: "agents"; count: number };
+
 export interface SessionSummary {
   id: string;
+  shortId: string;
   project: string;
   state: SemanticState;
-  reason: string;
+  since: number;
+  detail: SessionDetail | null;
 }
 
 export interface Snapshot {
   state: SemanticState;
   sessions: readonly SessionSummary[];
-  observation: string;
   companions: number;
 }
 
@@ -56,6 +63,7 @@ export interface PetBridge {
   endDrag(): void;
   openSessionList(): void;
   closeSessionList(): void;
+  copySessionId(id: string): void;
 }
 
 declare global {

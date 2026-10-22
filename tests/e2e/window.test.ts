@@ -98,7 +98,6 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
           pet.webContents.send("pagent:snapshot-changed", {
             state,
             sessions: [],
-            observation: "test input",
             companions: 0,
           });
         }, state);
@@ -138,9 +137,9 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
         ),
       )
       .toBe(true);
-    await expect(sessionPage!.locator("#observation")).toContainText(
-      "No Claude Code signals received yet",
-    );
+    await expect(sessionPage!.locator("#total")).toHaveText("No sessions yet");
+    await expect(sessionPage!.locator("#hint")).toBeVisible();
+    await expect(sessionPage!.locator("h1, button")).toHaveCount(0);
     await sessionPage!.keyboard.press("Escape");
     await expect
       .poll(() =>
@@ -225,18 +224,28 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
       )
       .toEqual([
         {
-          id: "fixture-",
+          id: "fixture-session",
+          shortId: "fixt",
           project: "fixture-project",
           state: "idle",
-          reason: "Waiting for the next prompt.",
+          since: expect.any(Number),
+          detail: null,
         },
       ]);
-    await expect(sessionPage!.locator("body")).toContainText(
-      "fixture-project · fixture-",
+    await expect(sessionPage!.locator("#total")).toHaveText("1 session");
+    await expect(sessionPage!.locator("#needs")).toHaveText("");
+    await expect(sessionPage!.locator("#hint")).toBeHidden();
+    const row = sessionPage!.locator("#sessions > li.row");
+    await expect(row).toHaveCount(1);
+    await expect(row.locator(".project")).toHaveText("fixture-project");
+    await expect(row.locator(".id")).toHaveCount(0);
+    await expect(row.locator(".detail")).toHaveText("Idle");
+    await expect(row.locator(".time")).toHaveText(/^\d+:\d{2}$/);
+    await expect(row).toHaveAttribute("title", "fixture-session");
+    await expect(row.locator(".copy")).toHaveAccessibleName(
+      "Copy session ID fixture-session",
     );
-    await expect(sessionPage!.locator("#sessions .state")).toHaveText(
-      stateLabels.idle,
-    );
+    await expect(row).toContainText(`${stateLabels.idle}:`);
     await expect(sessionPage!.locator("body")).not.toContainText(
       "must-not-leak",
     );

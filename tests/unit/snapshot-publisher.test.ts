@@ -7,8 +7,21 @@ import {
 } from "../../src/main/snapshot-publisher.ts";
 import type { Snapshot } from "../../src/shared/ui-contract.ts";
 
-function snapshot(observation: string): Snapshot {
-  return { state: "idle", sessions: [], observation, companions: 0 };
+function snapshot(project: string): Snapshot {
+  return {
+    state: "idle",
+    sessions: [
+      {
+        id: "abcd",
+        shortId: "abcd",
+        project,
+        state: "idle",
+        since: 0,
+        detail: null,
+      },
+    ],
+    companions: 0,
+  };
 }
 
 function encodedBytes(value: Snapshot): number {
@@ -449,7 +462,7 @@ test("requests reentered during send wait for another 50 ms without overlapping 
   publisher.request();
   scheduler.advance(50);
   assert.deepEqual(
-    sent.map((value) => value.snapshot.observation),
+    sent.map((value) => value.snapshot.sessions[0]!.project),
     ["initial", "initial"],
   );
   assert.equal(publisher.isPending(), true);
@@ -461,7 +474,7 @@ test("requests reentered during send wait for another 50 ms without overlapping 
     [50, 50, 100, 100],
   );
   assert.deepEqual(
-    sent.slice(2).map((value) => value.snapshot.observation),
+    sent.slice(2).map((value) => value.snapshot.sessions[0]!.project),
     ["changed during send", "changed during send"],
   );
   assert.equal(state.materializations, 2);

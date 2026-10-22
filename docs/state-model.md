@@ -24,6 +24,8 @@ Events that arrive after `SessionEnd` are ignored unless they start a new turn, 
 
 No state changes on elapsed time alone. If the receiver fails to start, or a loss occurs while no session is known, the pet shows `unknown` rather than `idle`.
 
+Each session also records when its displayed state last changed, the tool it is running, the tool or question it is asking about, and its background agent count. The session list ([`session-list.md`](session-list.md)) turns these into short summaries and an elapsed time; the time is display-only.
+
 While `asking`, a speech bubble with `!` pops in above the pet's head, then nudges with a short burst (bob, zoom or wiggle, varied each time) every few seconds and stays still in between. It disappears as soon as the ask clears. Its look and timing come from `src/renderer/pet/attention.json`, tuned in the attention lab (`pnpm playground`, then `/attention.html`).
 
 Each running background subagent also appears as a small companion sitting on the pet's head, up to three, whatever the displayed state; they take the pet's current colors. Their look and motion come from `src/renderer/pet/companions.json`, tuned in the companions lab (`pnpm playground`, then `/companions.html`).

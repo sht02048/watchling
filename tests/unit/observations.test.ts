@@ -27,10 +27,7 @@ function stateOf(observations: Observations, sessionId = "session-1") {
 test("aggregate shows the highest session state in priority order", () => {
   const observations = new Observations();
   assert.equal(observations.snapshot().state, "idle");
-  assert.equal(
-    observations.snapshot().observation,
-    "No Claude Code signals received yet.",
-  );
+  assert.deepEqual(observations.snapshot().sessions, []);
   feed(observations, event("SessionStart", { sessionId: "a" }));
   assert.equal(observations.snapshot().state, "idle");
   feed(
@@ -49,10 +46,6 @@ test("aggregate shows the highest session state in priority order", () => {
     event("PermissionRequest", { sessionId: "d", toolName: "Bash" }),
   );
   assert.equal(observations.snapshot().state, "asking");
-  assert.equal(
-    observations.snapshot().observation,
-    "Probably waiting for your approval or answer.",
-  );
   assert.deepEqual(
     observations.snapshot().sessions.map((row) => [row.id, row.state]),
     [
@@ -80,7 +73,7 @@ test("sessions in the same project are independent and short IDs stay distinct",
       ["sameprefix-B", "project", "working"],
     ],
   );
-  assert.equal(sessions[0]!.reason, "Waiting for the next prompt.");
+  assert.equal(sessions[0]!.detail, null);
 });
 
 test("two asks are cleared independently", () => {
@@ -291,10 +284,6 @@ test("Stop clears asks and ends the turn", () => {
   assert.equal(stateOf(observations), "asking");
   feed(observations, event("Stop"));
   assert.equal(stateOf(observations), "idle");
-  assert.equal(
-    observations.snapshot().observation,
-    "Claude Code is waiting for the next prompt.",
-  );
 });
 
 test("integrity loss marks sessions unknown until their own next prompt", () => {
@@ -324,7 +313,7 @@ test("integrity loss with no sessions shows unknown until the next event", () =>
   const observations = new Observations();
   observations.loseIntegrity();
   assert.equal(observations.snapshot().state, "unknown");
-  assert.match(observations.snapshot().observation, /signals were missed/);
+  assert.deepEqual(observations.snapshot().sessions, []);
   feed(observations, event("SessionStart"));
   assert.equal(observations.snapshot().state, "idle");
 });
@@ -449,7 +438,7 @@ test("session capacity overflow drops the event and loses integrity", () => {
   assert.equal(stateOf(observations, "s-0"), "working");
 });
 
-test("snapshots never carry fingerprints, interactivity, tool names or tool ids", () => {
+test("snapshots never carry fingerprints, interactivity or tool ids", () => {
   const observations = new Observations();
   feed(
     observations,
@@ -469,18 +458,23 @@ test("snapshots never carry fingerprints, interactivity, tool names or tool ids"
   for (const secret of [
     fpA,
     fpB,
-    "SecretToolName",
     "secret-tool-id",
     "interactive",
     "fingerprint",
   ])
     assert.ok(!encoded.includes(secret), secret);
   assert.deepEqual(Object.keys(observations.snapshot().sessions[0]!).sort(), [
+    "detail",
     "id",
     "project",
-    "reason",
+    "shortId",
+    "since",
     "state",
   ]);
+  assert.deepEqual(observations.snapshot().sessions[0]!.detail, {
+    kind: "permission",
+    tool: "SecretToolName",
+  });
 });
 
 test("repeated snapshots without events never change", async () => {
@@ -745,4 +739,193 @@ test("companions count background agents across sessions up to three", () => {
     event("SubagentStop", { sessionId: "b", agentId: "b1" }),
   );
   assert.equal(observations.snapshot().companions, 2);
+});
+
+function clock(start = 1_000) {
+  let at = start;
+  return {
+    now: () => at,
+    advance: (ms: number) => {
+      at += ms;
+    },
+  };
+}
+function only(observations: Observations) {
+  const sessions = observations.snapshot().sessions;
+  assert.equal(sessions.length, 1);
+  return sessions[0]!;
+}
+
+test("since starts at creation and moves only when the displayed state changes", () => {
+  const time = clock();
+  const observations = new Observations(time.now);
+  feed(observations, event("SessionStart"));
+  assert.equal(only(observations).since, 1_000);
+  time.advance(500);
+  feed(observations, event("UserPromptSubmit"));
+  assert.equal(only(observations).since, 1_500);
+  time.advance(500);
+  feed(
+    observations,
+    event("PreToolUse", { toolName: "Read", toolUseId: "t1" }),
+    event("PostToolUse", { toolName: "Read", toolUseId: "t1" }),
+    event("PreToolUse", { toolName: "Edit", toolUseId: "t2" }),
+  );
+  assert.equal(only(observations).state, "working");
+  assert.equal(only(observations).since, 1_500);
+  time.advance(60_000);
+  assert.equal(only(observations).since, 1_500);
+  assert.equal(only(observations).state, "working");
+  feed(
+    observations,
+    event("PermissionRequest", { toolName: "Edit", toolUseId: "t2" }),
+  );
+  assert.equal(only(observations).since, 62_000);
+  time.advance(1);
+  observations.loseIntegrity();
+  assert.equal(only(observations).state, "asking");
+  assert.equal(only(observations).since, 62_000);
+  feed(observations, event("Stop"));
+  assert.equal(only(observations).state, "unknown");
+  assert.equal(only(observations).since, 62_001);
+});
+
+test("detail names the running main-session tool and clears when it ends", () => {
+  const observations = new Observations();
+  feed(observations, event("UserPromptSubmit"));
+  assert.equal(only(observations).detail, null);
+  feed(
+    observations,
+    event("PreToolUse", { toolName: "Bash", toolUseId: "t1" }),
+  );
+  assert.deepEqual(only(observations).detail, { kind: "tool", tool: "Bash" });
+  feed(
+    observations,
+    event("PreToolUse", {
+      toolName: "Task",
+      toolUseId: "c1",
+      agentId: "child",
+    }),
+  );
+  assert.deepEqual(only(observations).detail, { kind: "tool", tool: "Bash" });
+  feed(
+    observations,
+    event("PostToolUse", { toolName: "Task", toolUseId: "other" }),
+  );
+  assert.deepEqual(only(observations).detail, { kind: "tool", tool: "Bash" });
+  feed(
+    observations,
+    event("PostToolUseFailure", { toolName: "Bash", toolUseId: "t1" }),
+  );
+  assert.equal(only(observations).detail, null);
+  feed(
+    observations,
+    event("PreToolUse", { toolName: "Read", toolUseId: "t2" }),
+  );
+  feed(
+    observations,
+    event("PostToolBatch", {
+      toolCalls: [{ toolName: "Read", toolUseId: "t2" }],
+    }),
+  );
+  assert.equal(only(observations).detail, null);
+  feed(
+    observations,
+    event("PreToolUse", { toolName: "Grep", toolUseId: "t3" }),
+  );
+  feed(observations, event("UserPromptSubmit"));
+  assert.equal(only(observations).detail, null);
+  feed(
+    observations,
+    event("PreToolUse", { toolName: "Grep", toolUseId: "t4" }),
+  );
+  feed(observations, event("Stop"), event("UserPromptSubmit"));
+  assert.equal(only(observations).detail, null);
+});
+
+test("asking detail prefers a question, else the latest permission tool", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PermissionRequest", { toolName: "Bash", toolUseId: "t1" }),
+  );
+  assert.deepEqual(only(observations).detail, {
+    kind: "permission",
+    tool: "Bash",
+  });
+  feed(
+    observations,
+    event("PermissionRequest", {
+      toolName: "mcp__github__create_issue",
+      inputFingerprint: fpA,
+    }),
+  );
+  assert.deepEqual(only(observations).detail, {
+    kind: "permission",
+    tool: "mcp__github__create_issue",
+  });
+  feed(
+    observations,
+    event("PreToolUse", { toolName: "AskUserQuestion", toolUseId: "q1" }),
+  );
+  assert.deepEqual(only(observations).detail, { kind: "question" });
+  feed(
+    observations,
+    event("PostToolUse", { toolName: "AskUserQuestion", toolUseId: "q1" }),
+  );
+  assert.deepEqual(only(observations).detail, {
+    kind: "permission",
+    tool: "mcp__github__create_issue",
+  });
+});
+
+test("a notification-only ask has no tool name", () => {
+  const observations = new Observations();
+  feed(observations, event("UserPromptSubmit"), event("Notification"));
+  assert.equal(only(observations).state, "asking");
+  assert.deepEqual(only(observations).detail, { kind: "permission" });
+});
+
+test("background detail counts the session's agents", () => {
+  const observations = new Observations();
+  const launch = (id: string) =>
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: `launch-${id}`,
+      childStatus: "async_launched",
+      childAgentId: id,
+    });
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    launch("a1"),
+    launch("a2"),
+    event("Stop"),
+  );
+  assert.deepEqual(only(observations).detail, { kind: "agents", count: 2 });
+  feed(observations, event("SubagentStop", { agentId: "a1" }));
+  assert.deepEqual(only(observations).detail, { kind: "agents", count: 1 });
+});
+
+test("short ids are at least four characters and unique only within a project", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("SessionStart", { sessionId: "4f2a9c1e", project: "pagent" }),
+    event("SessionStart", { sessionId: "4f2a77d0", project: "pagent" }),
+    event("SessionStart", { sessionId: "b81d0c3a", project: "pagent" }),
+    event("SessionStart", { sessionId: "4f2a0000", project: "other" }),
+    event("SessionStart", { sessionId: "ab", project: "tiny" }),
+  );
+  assert.deepEqual(
+    observations.snapshot().sessions.map((row) => [row.project, row.shortId]),
+    [
+      ["pagent", "4f2a9"],
+      ["pagent", "4f2a7"],
+      ["pagent", "b81d"],
+      ["other", "4f2a"],
+      ["tiny", "ab"],
+    ],
+  );
 });

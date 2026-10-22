@@ -25,6 +25,7 @@ export function attachIpc(options: {
   endDrag: () => void;
   openList: () => void;
   closeList: () => void;
+  copy: (text: string) => void;
 }): () => void {
   const listeners: [
     string,
@@ -85,6 +86,15 @@ export function attachIpc(options: {
   }
   listen("pagent:list-close", "sessions", (...args) => {
     if (args.length === 0) options.closeList();
+  });
+  listen("pagent:copy-session-id", "sessions", (...args) => {
+    const id = args[0];
+    if (
+      args.length === 1 &&
+      typeof id === "string" &&
+      options.snapshot().sessions.some((session) => session.id === id)
+    )
+      options.copy(id);
   });
   return () => {
     ipcMain.removeHandler("pagent:snapshot");

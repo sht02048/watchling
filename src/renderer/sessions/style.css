@@ -1,9 +1,16 @@
 :root {
+  --ink: #23262f;
+  --muted: #646a76;
+  --rule: rgba(35, 38, 47, 0.08);
   font:
-    14px/1.6 system-ui,
+    13px/1.45 -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
     sans-serif;
-  color: #343b32;
+  color: var(--ink);
   background: #faf8f3;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
 }
 * {
   box-sizing: border-box;
@@ -11,81 +18,188 @@
 html,
 body {
   height: 100%;
+  margin: 0;
 }
 body {
-  margin: 0;
-  padding: 18px;
   display: flex;
+  user-select: none;
   flex-direction: column;
 }
-#observation {
-  margin: 8px 0 0;
-}
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-h1 {
-  margin: 0;
-  font-size: 16px;
-}
-button {
-  font: inherit;
-  border: 1px solid #b9bdb1;
-  border-radius: 6px;
-  padding: 4px 10px;
-  color: inherit;
-  background: transparent;
-  cursor: pointer;
-}
-button:focus-visible {
-  outline: 2px solid #6c735b;
-  outline-offset: 2px;
-}
 ul {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  margin: 10px 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
-li div {
+.head {
   display: flex;
-  align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-}
-.state {
-  flex: none;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
   font-size: 12px;
+}
+.needs {
+  color: #6a3fc7;
+  font-weight: 600;
+}
+#sessions {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto 44px;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+}
+#sessions > li + li {
+  border-top: 1px solid var(--rule);
+}
+.row.asking {
+  background: rgba(118, 76, 220, 0.07);
+}
+.row.asking .detail {
+  color: #5a2fb8;
+  font-weight: 600;
+}
+.dot {
+  pointer-events: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.project,
+.id {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.detail {
+  max-width: 130px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 12px;
+}
+.time {
+  text-align: end;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.count {
+  margin-inline-start: 6px;
+  padding: 0 6px;
   border-radius: 999px;
-  padding: 0 8px;
-  background: #e8e9e1;
+  background: rgba(35, 38, 47, 0.07);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
-.state-asking {
-  color: #7a4b12;
-  background: #f6e3c4;
+.row.child {
+  height: 28px;
+  padding-inline-start: 30px;
 }
-.state-unknown {
-  color: #5b5f66;
-  background: #e3e4e8;
+.child .dot {
+  width: 6px;
+  height: 6px;
+  justify-self: center;
 }
-li {
-  padding: 10px 0;
-  border-top: 1px solid #d6d8ce;
-  overflow-wrap: anywhere;
+.child .detail,
+.child .time {
+  font-size: 11.5px;
 }
-li p {
-  margin: 4px 0 0;
+.name {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
 }
-#observation,
-footer {
-  color: #62685d;
+.name > .project,
+.name > .id {
+  flex: 0 1 auto;
+  min-width: 0;
 }
-footer {
-  border-top: 1px solid #d6d8ce;
-  padding-top: 10px;
+.copy {
+  flex: none;
+  position: relative;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  opacity: 0;
+  cursor: pointer;
+  transition-property: opacity, color, background-color, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+.copy::before {
+  content: "";
+  position: absolute;
+  inset: -3px -9px;
+}
+.copy svg {
+  position: absolute;
+  inset: 4px;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.copy .icon-done,
+.copy.copied .icon-copy {
+  display: none;
+}
+.copy.copied .icon-done {
+  display: block;
+  stroke-width: 1.75;
+}
+.copy.copied {
+  color: #23744a;
+}
+.row:hover .copy,
+.row:focus-within .copy,
+.copy.copied {
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .copy:hover {
+    background: rgba(35, 38, 47, 0.09);
+  }
+}
+.copy:active {
+  transform: scale(0.96);
+}
+.copy:focus-visible {
+  outline: 2px solid rgba(35, 38, 47, 0.55);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .copy {
+    transition: none;
+  }
+}
+.hint {
+  margin: 0;
+  padding: 14px;
+  color: var(--muted);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

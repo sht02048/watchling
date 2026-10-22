@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   Menu,
   nativeImage,
   protocol,
@@ -292,6 +293,7 @@ async function start(options: DesktopOptions): Promise<void> {
     endDrag,
     openList: showList,
     closeList: () => list?.hide(),
+    copy: (text) => clipboard.writeText(text),
   });
   pet.webContents.on("render-process-gone", () => {
     console.error("Pet renderer exited");

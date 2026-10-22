@@ -8,12 +8,13 @@
     <script type="module" src="index.js"></script>
   </head>
   <body>
-    <header>
-      <h1>Sessions</h1>
-      <button id="close" aria-label="Close the list">Close</button>
+    <header class="head">
+      <span id="total">No sessions yet</span>
+      <span id="needs" class="needs"></span>
     </header>
-    <p id="observation" role="status">Checking observations…</p>
-    <ul id="sessions"></ul>
-    <footer>Only signals received since the app started are shown.</footer>
+    <ul id="sessions" aria-label="Sessions"></ul>
+    <p id="hint" class="hint" hidden>
+      Start Claude Code in a terminal and it appears here.
+    </p>
   </body>
 </html>
