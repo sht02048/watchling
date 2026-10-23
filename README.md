@@ -22,7 +22,8 @@ Start a long task, switch to something else, and look up when Peep turns purple.
 
 - **Live session state** — Peep shows the most urgent state across all your Claude Code sessions
 - **Attention bubble** — a purple speech bubble when a session needs approval or an answer, with no sounds or notifications
-- **Background companions** — up to three small companions ride on Peep's head while background agents run
+- **Subagent companions** — up to three small companions ride on Peep's head while subagents run
+- **Background tasks** — Peep turns mint while Claude waits on a build, test or other task running in the background
 - **Session list** — click Peep to see every session grouped by project, with what it's doing and for how long
 - **Jump to a session** — click a session to bring its terminal forward; in Orca it opens the exact tab
 - **Stays out of the way** — Peep dozes off when nothing is happening, dims, and steps away when no session is open; its size and behavior live in Settings
@@ -43,19 +44,19 @@ Requires macOS 13 or later on Apple silicon.
 ### Peep's states
 
 <p align="center">
-  <img src="docs/assets/peep-states.png" width="720" alt="Peep in each state, left to right: purple with a speech bubble, grey, orange, blue with two companions on its head, coral, and coral asleep with closed eyes and drifting z's">
+  <img src="docs/assets/peep-states.png" width="840" alt="Peep in each state, left to right: coral, coral asleep with closed eyes and drifting z's, orange typing on a small keyboard, purple with a speech bubble, blue with two companions on its head, mint with a dot circling it, and grey">
 </p>
 
 | Peep looks              | Meaning                                          |
 | ----------------------- | ------------------------------------------------ |
-| Purple, speech bubble   | A session is waiting for your approval or answer |
-| Grey                    | Watchling missed some signals and can't tell     |
-| Orange, typing away     | Claude is working                                |
-| Blue, companions on top | Only background agents are running               |
-| Mint, a dot circling    | Claude waits on a background task                |
 | Coral, then dozes off   | Nothing to do                                    |
+| Orange, typing away     | Claude is working                                |
+| Purple, speech bubble   | A session is waiting for your approval or answer |
+| Blue, companions on top | Only subagents are still running                 |
+| Mint, a dot circling    | Claude waits on a background task                |
+| Grey                    | Watchling missed some signals and can't tell     |
 
-Mint also covers a dev server left running in the background, so after ten minutes it dozes off and dims like coral does after three. With several sessions open, Peep shows the one highest in this table. See [docs/state-model.md](docs/state-model.md) for the full rules.
+With several sessions open, Peep shows the most urgent one: purple, then grey, orange, blue, mint and coral. Mint also covers a dev server left running in the background, so after ten minutes it dozes off and dims like coral does after three. See [docs/state-model.md](docs/state-model.md) for the full rules.
 
 ### Session list
 
