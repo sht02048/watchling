@@ -12,6 +12,10 @@ const MAX_PENDING = 64;
 const MAX_ENDED = 256;
 const MAX_BACKGROUND = 32;
 const MAX_COMPANIONS = 3;
+// The hooks docs show "shell"; Claude Code's own name for the task kind is "local_bash".
+const SHELL_TASKS = new Set(["shell", "local_bash"]);
+// "running" is the only documented status, so anything else counts as finished.
+const ACTIVE_TASKS = new Set(["running", "pending"]);
 
 interface Ask {
   tool?: string;
@@ -56,6 +60,7 @@ interface Session {
   background: Set<string>;
   workflow: Set<string>;
   activeTool: { id: string; name: string } | null;
+  shellTasks: number;
   shown: SemanticState;
   since: number;
 }
@@ -106,6 +111,7 @@ function display(session: Session): SemanticState {
     return "asking";
   if (session.unknown) return "unknown";
   if (session.base === "idle" && agentCount(session) > 0) return "background";
+  if (session.base === "idle" && session.shellTasks > 0) return "waiting";
   return session.base;
 }
 
@@ -128,6 +134,7 @@ function detail(session: Session, state: SemanticState): SessionDetail | null {
       : null;
   if (state === "background")
     return { kind: "agents", count: agentCount(session) };
+  if (state === "waiting") return { kind: "tasks", count: session.shellTasks };
   return null;
 }
 
@@ -210,6 +217,7 @@ export class Observations {
         background: new Set(),
         workflow: new Set(),
         activeTool: null,
+        shellTasks: 0,
         shown: "idle",
         since: this.now(),
       };
@@ -222,7 +230,17 @@ export class Observations {
         ...(event.terminalApp ? { app: event.terminalApp } : {}),
         ...(event.orcaTerminal ? { orcaTerminal: event.orcaTerminal } : {}),
       };
-    if (event.backgroundTasks?.length === 0) session.background.clear();
+    if (event.backgroundTasks) {
+      const shells = event.backgroundTasks.filter((task) =>
+        SHELL_TASKS.has(task.type),
+      );
+      // A list with no agent in it means a launch or stop Watchling missed left a stale one.
+      if (shells.length === event.backgroundTasks.length)
+        session.background.clear();
+      session.shellTasks = shells.filter((task) =>
+        ACTIVE_TASKS.has(task.status),
+      ).length;
+    }
     // Only background agents act while the main turn is idle. This recovers one
     // whose launch was missed, for example because Watchling restarted.
     if (

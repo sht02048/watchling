@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import {
-  stateLabels,
-  type SemanticState,
-} from "../../src/shared/ui-contract.ts";
+import { semanticStates, stateLabels } from "../../src/shared/ui-contract.ts";
 
 test("native pet uses isolated UI, continuous animation and a read-only list", async () => {
   const home = await mkdtemp(join(tmpdir(), "watchling-electron-"));
@@ -84,13 +81,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
     });
     for (const motion of ["reduce", "no-preference"] as const) {
       await page.emulateMedia({ reducedMotion: motion });
-      for (const state of [
-        "idle",
-        "background",
-        "working",
-        "unknown",
-        "asking",
-      ] as SemanticState[]) {
+      for (const state of semanticStates) {
         await application.evaluate(({ BrowserWindow }, state) => {
           const pet = BrowserWindow.getAllWindows().find((window) =>
             window.webContents.getURL().includes("/pet/"),

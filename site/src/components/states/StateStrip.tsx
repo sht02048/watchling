@@ -8,21 +8,23 @@ import {
 } from "@watchling/shared/ui-contract.ts";
 import styles from "./StateStrip.module.css";
 
-const ORDER: readonly SemanticState[] = [
+// The demo has no background shell tasks, so it never shows the waiting state.
+type DemoState = Exclude<SemanticState, "waiting">;
+const ORDER: readonly DemoState[] = [
   "idle",
   "working",
   "asking",
   "background",
   "unknown",
 ];
-const MEANING: Record<SemanticState, string> = {
+const MEANING: Record<DemoState, string> = {
   idle: "Waiting for you",
   working: "Claude is busy",
   asking: "Claude needs you",
   background: "Agents still running",
   unknown: "Signals lost",
 };
-const HOW: Record<SemanticState, string> = {
+const HOW: Record<DemoState, string> = {
   idle: "Shown on load",
   working: "Pick Work on a task",
   asking: "Pick Ask for permission",

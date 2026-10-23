@@ -45,6 +45,11 @@ function summary(session: SessionSummary): string {
         detail?.kind === "agents" ? detail.count : 0,
         "background agent",
       );
+    case "waiting":
+      return `Waiting on ${plural(
+        detail?.kind === "tasks" ? detail.count : 0,
+        "background task",
+      )}`;
     case "unknown":
       return "Missed signals";
     case "idle":

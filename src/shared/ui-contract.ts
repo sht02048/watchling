@@ -1,5 +1,6 @@
 export const semanticStates = [
   "idle",
+  "waiting",
   "background",
   "working",
   "unknown",
@@ -8,6 +9,7 @@ export const semanticStates = [
 export type SemanticState = (typeof semanticStates)[number];
 export const stateLabels: Record<SemanticState, string> = {
   idle: "Idle",
+  waiting: "Waiting",
   background: "Background",
   working: "Working",
   unknown: "Unknown",
@@ -18,7 +20,8 @@ export type SessionDetail =
   | { kind: "permission"; tool?: string }
   | { kind: "question" }
   | { kind: "tool"; tool: string }
-  | { kind: "agents"; count: number };
+  | { kind: "agents"; count: number }
+  | { kind: "tasks"; count: number };
 
 export interface SessionSummary {
   id: string;

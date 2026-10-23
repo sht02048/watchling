@@ -1182,3 +1182,115 @@ test("a known background agent is not counted twice", () => {
   );
   assert.equal(observations.snapshot().companions, 2);
 });
+
+test("a finished turn with a running background shell task is waiting", () => {
+  const observations = new Observations();
+  const shell = (status: string) => ({ id: "t1", type: "shell", status });
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("Stop", { backgroundTasks: [shell("running")] }),
+  );
+  assert.equal(observations.snapshot().state, "waiting");
+  assert.deepEqual(observations.snapshot().sessions[0]!.detail, {
+    kind: "tasks",
+    count: 1,
+  });
+  assert.equal(observations.snapshot().companions, 0);
+  feed(observations, event("UserPromptSubmit"));
+  assert.equal(observations.snapshot().state, "working");
+  feed(observations, event("Stop", { backgroundTasks: [shell("completed")] }));
+  assert.equal(observations.snapshot().state, "idle");
+  feed(observations, event("Stop", { backgroundTasks: [shell("running")] }));
+  assert.equal(observations.snapshot().state, "waiting");
+  feed(observations, event("Stop", { backgroundTasks: [] }));
+  assert.equal(observations.snapshot().state, "idle");
+});
+
+test("background agents outrank waiting, and other task types are not shell tasks", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: "t1",
+      childAgentId: "agent-1",
+      childStatus: "async_launched",
+    }),
+    event("Stop", {
+      backgroundTasks: [
+        { id: "a", type: "local_agent", status: "running" },
+        { id: "s", type: "shell", status: "running" },
+      ],
+    }),
+  );
+  assert.equal(observations.snapshot().state, "background");
+  feed(observations, event("SubagentStop", { agentId: "agent-1" }));
+  assert.equal(observations.snapshot().state, "waiting");
+  feed(
+    observations,
+    event("Stop", {
+      backgroundTasks: [{ id: "a", type: "local_agent", status: "running" }],
+    }),
+  );
+  assert.equal(observations.snapshot().state, "idle");
+});
+
+test("only running shell tasks count, under either type name", () => {
+  const observations = new Observations();
+  const stop = (type: string, status: string) =>
+    event("Stop", { backgroundTasks: [{ id: "t", type, status }] });
+  feed(observations, event("UserPromptSubmit"), stop("local_bash", "running"));
+  assert.equal(observations.snapshot().state, "waiting");
+  for (const status of ["exited", "Completed", "success", "killed"]) {
+    feed(observations, stop("shell", status));
+    assert.equal(observations.snapshot().state, "idle", status);
+  }
+  feed(observations, stop("shell", "pending"));
+  assert.equal(observations.snapshot().state, "waiting");
+});
+
+test("a shell-only task list clears a background agent whose stop was missed", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("PreToolUse", {
+      agentId: "ghost",
+      toolName: "Read",
+      toolUseId: "t1",
+    }),
+  );
+  assert.equal(observations.snapshot().state, "background");
+  feed(
+    observations,
+    event("SubagentStop", {
+      agentId: "other",
+      backgroundTasks: [{ id: "s", type: "shell", status: "running" }],
+    }),
+  );
+  assert.equal(observations.snapshot().state, "waiting");
+  assert.equal(observations.snapshot().companions, 0);
+});
+
+test("an interrupt or a failed stop keeps the last task count, and SessionEnd drops it", () => {
+  const observations = new Observations();
+  const running = [{ id: "s", type: "shell", status: "running" }];
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("Stop", { backgroundTasks: running }),
+    event("UserPromptSubmit"),
+    event("PostToolUseFailure", {
+      toolName: "Bash",
+      toolUseId: "t1",
+      isInterrupt: true,
+    }),
+  );
+  assert.equal(observations.snapshot().state, "waiting");
+  feed(observations, event("UserPromptSubmit"), event("StopFailure"));
+  assert.equal(observations.snapshot().state, "waiting");
+  feed(observations, event("SessionEnd"));
+  assert.deepEqual(observations.snapshot().sessions, []);
+  assert.equal(observations.snapshot().state, "idle");
+});

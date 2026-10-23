@@ -30,6 +30,7 @@ interface Pose {
 interface Figure extends Pose {
   t: number;
   sleep: number;
+  orbit: number;
   phase: number;
   rotPhase: number;
   tilt: number;
@@ -88,8 +89,14 @@ const SLEEP: Pose = {
 };
 // The app dims an idle Peep 30 seconds after it falls asleep.
 const SLEEP_DELAY = 180;
+const WAITING_SLEEP_DELAY = 600;
+const ORBIT_SPEED = 1.5;
+// Waiting on a background task naps like idle, so a dev server left running does not keep Peep up.
+const resting = (state: SemanticState): boolean =>
+  state === "idle" || state === "waiting";
 const POSES: Record<SemanticState, Pose> = {
   idle: IDLE,
+  waiting: { ...IDLE, speed: 0.5, wave: 0.05, field: 0.55 },
   background: {
     ...IDLE,
     amp: 0.035,
@@ -153,6 +160,7 @@ const lch = (l: number, c: number, h: number): OKLab => [
 ];
 export const PALETTE: Record<SemanticState, readonly [OKLab, OKLab]> = {
   idle: [lch(0.88, 0.07, 60), lch(0.74, 0.14, 25)],
+  waiting: [lch(0.9, 0.075, 150), lch(0.74, 0.11, 160)],
   background: [lch(0.88, 0.07, 215), lch(0.7, 0.12, 255)],
   working: [lch(0.9, 0.11, 90), lch(0.76, 0.16, 55)],
   asking: [lch(0.86, 0.11, 310), lch(0.66, 0.17, 300)],
@@ -281,6 +289,36 @@ function drawEyes(ctx: CanvasRenderingContext2D, f: Figure, r: number): void {
   }
 }
 
+// A small satellite circles Peep while a background task runs; on the back half
+// of the orbit it is hidden wherever the body covers it.
+function drawSatellite(
+  ctx: CanvasRenderingContext2D,
+  f: Figure,
+  r: number,
+  body: Path2D,
+): void {
+  if (f.orbit < 0.01) return;
+  for (let k = 14; k >= 0; k--) {
+    const a = f.t * ORBIT_SPEED - k * 0.07;
+    const x = Math.cos(a) * r * 1.18;
+    const y = Math.sin(a) * r * 0.42 - r * 0.05;
+    if (Math.sin(a) < 0) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const hidden = ctx.isPointInPath(body, x, y);
+      ctx.restore();
+      if (hidden) continue;
+    }
+    ctx.fillStyle = rgb(
+      [f.c2[0] - 0.14, f.c2[1] * 1.1, f.c2[2] * 1.1],
+      f.orbit * (k === 0 ? 0.95 : 0.35 * (1 - k / 15)),
+    );
+    ctx.beginPath();
+    ctx.arc(x, y, r * (k === 0 ? 0.075 : 0.05 * (1 - k / 18)), 0, TAU);
+    ctx.fill();
+  }
+}
+
 function drawSnores(ctx: CanvasRenderingContext2D, f: Figure, r: number): void {
   if (f.sleep < 0.01) return;
   ctx.textAlign = "center";
@@ -353,6 +391,7 @@ function draw(
   ctx.restore();
   drawEyes(ctx, f, r);
   drawSnores(ctx, f, r);
+  drawSatellite(ctx, f, r, body);
   return body;
 }
 
@@ -401,7 +440,8 @@ export function createPet(
   const c1 = colorSprings(PALETTE.unknown[0]);
   const c2 = colorSprings(PALETTE.unknown[1]);
   const sleep = spring(0);
-  const springs = [...Object.values(params), ...c1, ...c2, sleep];
+  const orbit = spring(0);
+  const springs = [...Object.values(params), ...c1, ...c2, sleep, orbit];
   const squash = spring(0);
   let shown: SemanticState = "unknown";
   let idleSince = 0;
@@ -410,6 +450,7 @@ export function createPet(
     ...initial,
     t: 0,
     sleep: 0,
+    orbit: 0,
     phase: 0,
     rotPhase: 0,
     tilt: 0,
@@ -445,6 +486,10 @@ export function createPet(
     figure.sx /= Math.sqrt(stretch * snore);
     figure.sy *= stretch * snore;
     figure.offY = 0.04 * figure.sleep;
+    figure.orbit = Math.min(1, Math.max(0, orbit.v));
+    const angle = figure.t * ORBIT_SPEED;
+    figure.lookX += (Math.cos(angle) * 0.9 - figure.lookX) * figure.orbit;
+    figure.lookY += (Math.sin(angle) * 0.5 - figure.lookY) * figure.orbit;
     figure.tilt = figure.sway * 0.1 * Math.sin(figure.t * 0.9);
     figure.eye *= 1 - blink * 0.92;
     for (const channel of COLOR_CHANNELS) {
@@ -505,7 +550,8 @@ export function createPet(
     figure.t += dt;
     figure.phase += params.speed.v * dt;
     figure.rotPhase += params.rot.v * dt;
-    if (shown === "idle" && !asleep && figure.t - idleSince >= SLEEP_DELAY) {
+    const delay = shown === "waiting" ? WAITING_SLEEP_DELAY : SLEEP_DELAY;
+    if (resting(shown) && !asleep && figure.t - idleSince >= delay) {
       asleep = true;
       sleep.target = 1;
       for (const key of POSE_KEYS) params[key].target = SLEEP[key];
@@ -529,11 +575,12 @@ export function createPet(
         params.field.vel += 1.5;
       }
       if (state === "asking" && shown !== "asking") askedAt = figure.t;
-      if (state === "idle" && shown !== "idle") idleSince = figure.t;
-      if (state !== "idle") {
+      if (resting(state) && !resting(shown)) idleSince = figure.t;
+      if (!resting(state)) {
         asleep = false;
         sleep.target = 0;
       }
+      orbit.target = state === "waiting" ? 1 : 0;
       shown = state;
       const pose = asleep ? SLEEP : POSES[state];
       for (const key of POSE_KEYS) params[key].target = pose[key];

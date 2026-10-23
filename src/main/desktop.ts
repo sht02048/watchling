@@ -41,6 +41,7 @@ import {
   DIMMED_OPACITY,
   DIM_DELAY_MS,
   HIDE_DELAY_MS,
+  WAITING_DIM_DELAY_MS,
   presence,
   type Activity,
   type Presence,
@@ -448,6 +449,7 @@ function updatePresence(): void {
 }
 
 function currentActivity(): Activity {
+  if (snapshot.state === "waiting") return "waiting";
   if (snapshot.state !== "idle") return "active";
   return snapshot.sessions.length === 0 ? "empty" : "idle";
 }
@@ -480,7 +482,11 @@ function updateActivity(): void {
   };
   idleTimer = setTimeout(
     settle,
-    presenceFor(next) === "hidden" ? HIDE_DELAY_MS : DIM_DELAY_MS,
+    presenceFor(next) === "hidden"
+      ? HIDE_DELAY_MS
+      : next === "waiting"
+        ? WAITING_DIM_DELAY_MS
+        : DIM_DELAY_MS,
   );
 }
 

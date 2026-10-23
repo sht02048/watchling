@@ -7,6 +7,7 @@ import {
 
 const descriptions: Record<SemanticState, string> = {
   idle: "A new session, or a finished turn waiting for the next prompt.",
+  waiting: "The turn ended but a background shell task is still running.",
   background: "The main turn ended but background subagents are still running.",
   working:
     "A turn is in progress. The pet hops once when it enters this state.",
