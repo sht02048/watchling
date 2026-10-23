@@ -35,15 +35,32 @@ export function expand(area: Bounds, inset: number): Bounds {
   };
 }
 
+// pet-figure draws Peep around 52% of the window height, about 31% of the
+// side across including its spikes; the rest of the window is transparent.
+function petBody(pet: Bounds): Bounds {
+  const radius = Math.min(pet.width, pet.height) * 0.31;
+  const x = pet.x + pet.width / 2;
+  const y = pet.y + pet.height * 0.52;
+  return {
+    x: x - radius,
+    y: y - radius,
+    width: radius * 2,
+    height: radius * 2,
+  };
+}
+
 export function listPosition(
   pet: Bounds,
   area: Bounds,
   size: { width: number; height: number },
 ): Point {
-  const x = pet.x + pet.width - size.width;
-  const above = pet.y - size.height - 8;
+  const body = petBody(pet);
+  const gap = 10;
+  const towardsLeft = body.x + body.width / 2 >= area.x + area.width / 2;
+  const x = towardsLeft ? body.x + body.width - size.width : body.x;
+  const above = body.y - gap - size.height;
   return clampWindow(
-    { x, y: above >= area.y ? above : pet.y + pet.height + 8 },
+    { x, y: above >= area.y ? above : body.y + body.height + gap },
     area,
     size,
   );

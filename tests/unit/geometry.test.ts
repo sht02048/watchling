@@ -35,17 +35,29 @@ test("clamps negative-origin displays and undersized work areas", () => {
     { x: -40, y: 20 },
   );
 });
-test("places list below top-edge pets and above bottom-edge pets", () => {
+test("places the list beside Peep's body, below at the top edge and above otherwise", () => {
   const area = { x: 0, y: 24, width: 1440, height: 876 };
   const list = { width: 320, height: 280 };
   assert.deepEqual(
     listPosition({ x: 1260, y: 720, width: 180, height: 180 }, area, list),
-    { x: 1120, y: 432 },
+    { x: 1086, y: 468 },
   );
   assert.deepEqual(
     listPosition({ x: 0, y: 24, width: 180, height: 180 }, area, list),
-    { x: 0, y: 212 },
+    { x: 34, y: 183 },
   );
+});
+test("the list keeps the same gap from Peep's body at every size", () => {
+  const area = { x: 0, y: 24, width: 1440, height: 876 };
+  const list = { width: 320, height: 280 };
+  for (const side of [135, 180, 270]) {
+    const pet = { x: 1000, y: 500, width: side, height: side };
+    const top = pet.y + side * 0.52 - side * 0.31;
+    const right = pet.x + side / 2 + side * 0.31;
+    const position = listPosition(pet, area, list);
+    assert.ok(Math.abs(top - (position.y + list.height) - 10) <= 1, `${side}`);
+    assert.ok(Math.abs(right - (position.x + list.width)) <= 1, `${side}`);
+  }
 });
 test("pets may overhang display edges by their transparent margin", () => {
   const area = expand({ x: 0, y: 0, width: 1440, height: 900 }, 30);
