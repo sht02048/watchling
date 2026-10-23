@@ -252,11 +252,11 @@ function appMenu(): Menu {
         ...(connection?.available
           ? [
               {
-                label: "Launch at Login",
+                label: "Open When Mac Starts",
                 type: "checkbox" as const,
                 checked: app.getLoginItemSettings().openAtLogin,
                 click: (menuItem: Electron.MenuItem) =>
-                  void setLaunchAtLogin(menuItem.checked),
+                  void setOpenAtStartup(menuItem.checked),
               },
             ]
           : []),
@@ -303,7 +303,7 @@ function appMenu(): Menu {
   ]);
 }
 
-async function setLaunchAtLogin(value: boolean): Promise<void> {
+async function setOpenAtStartup(value: boolean): Promise<void> {
   app.setLoginItemSettings({ openAtLogin: value });
   updateMenu();
   if (!value || app.getLoginItemSettings().status !== "requires-approval")
@@ -311,9 +311,9 @@ async function setLaunchAtLogin(value: boolean): Promise<void> {
   app.focus({ steal: true });
   const { response } = await dialog.showMessageBox({
     type: "info",
-    message: "Allow Watchling in Login Items",
+    message: "Allow Watchling to open when your Mac starts",
     detail:
-      "macOS needs your approval before Watchling can open at login. Turn Watchling on in System Settings > General > Login Items.",
+      "macOS needs your approval first. Turn Watchling on in System Settings > General > Login Items.",
     buttons: ["Open System Settings", "Cancel"],
     defaultId: 0,
     cancelId: 1,
@@ -719,6 +719,11 @@ async function start(options: DesktopOptions): Promise<void> {
     pet.loadURL(viewUrls.pet),
     list.loadURL(viewUrls.sessions),
   ]);
+  if (connection?.available && !settings.startupApplied) {
+    app.setLoginItemSettings({ openAtLogin: true });
+    settings = { ...settings, startupApplied: true };
+    void settingsStore.save(settings);
+  }
   tray = new Tray(trayIcon());
   updateTray();
   updateMenu();

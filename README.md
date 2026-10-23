@@ -79,7 +79,7 @@ Watchling has no Dock icon. Use the menu bar icon to show or hide Peep, bring it
 
 **Settings** in the same menu holds:
 
-- **Launch at Login**
+- **Open When Mac Starts** — on by default
 - **Show on All Spaces** — on by default, including full-screen apps
 - **Pet Size** — Small, Medium, Large or Extra Large
 - **Hide When No Sessions** — on by default. Peep steps away three minutes after the last session ends and returns as soon as one starts.

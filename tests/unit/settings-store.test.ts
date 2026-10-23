@@ -19,6 +19,7 @@ test("settings start from the defaults and keep the last saved values", async ()
       allSpaces: false,
       hideWhenEmpty: false,
       dimWhenIdle: true,
+      startupApplied: true,
     };
     await Promise.all([
       store.save({ ...defaultSettings, petSize: "small" }),
@@ -34,6 +35,7 @@ test("settings start from the defaults and keep the last saved values", async ()
       { allSpaces: "yes" },
       { hideWhenEmpty: 1 },
       { dimWhenIdle: null },
+      { startupApplied: "yes" },
     ])
       await assert.rejects(
         store.save({ ...defaultSettings, ...invalid } as unknown as Settings),

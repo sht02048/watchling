@@ -18,6 +18,9 @@ export interface Settings {
   allSpaces: boolean;
   hideWhenEmpty: boolean;
   dimWhenIdle: boolean;
+  // Set once Watchling has turned on Open When Mac Starts by default, so a
+  // later choice to turn it off is never undone.
+  startupApplied: boolean;
 }
 
 export const defaultSettings: Settings = {
@@ -25,13 +28,19 @@ export const defaultSettings: Settings = {
   allSpaces: true,
   hideWhenEmpty: true,
   dimWhenIdle: true,
+  startupApplied: false,
 };
 
 function isPetSize(value: unknown): value is PetSize {
   return typeof value === "string" && Object.hasOwn(petSizes, value);
 }
 
-const flags = ["allSpaces", "hideWhenEmpty", "dimWhenIdle"] as const;
+const flags = [
+  "allSpaces",
+  "hideWhenEmpty",
+  "dimWhenIdle",
+  "startupApplied",
+] as const;
 
 export class SettingsStore {
   private writes: Promise<void> = Promise.resolve();
@@ -80,6 +89,7 @@ export class SettingsStore {
       allSpaces: settings.allSpaces,
       hideWhenEmpty: settings.hideWhenEmpty,
       dimWhenIdle: settings.dimWhenIdle,
+      startupApplied: settings.startupApplied,
     };
     this.writes = this.writes
       .then(() => writePrivateJson(this.directory, "settings.json", value))
