@@ -14,21 +14,21 @@ const ORDER: readonly DemoState[] = [
   "idle",
   "working",
   "asking",
-  "background",
+  "subagents",
   "unknown",
 ];
 const MEANING: Record<DemoState, string> = {
   idle: "Waiting for you",
   working: "Claude is busy",
   asking: "Claude needs you",
-  background: "Agents still running",
+  subagents: "Agents still running",
   unknown: "Signals lost",
 };
 const HOW: Record<DemoState, string> = {
   idle: "Shown on load",
   working: "Pick Work on a task",
   asking: "Pick Ask for permission",
-  background: "Pick Run background agents",
+  subagents: "Pick Run background agents",
   unknown: "Pick Lose the connection",
 };
 

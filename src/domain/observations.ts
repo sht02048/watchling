@@ -110,7 +110,7 @@ function display(session: Session): SemanticState {
   )
     return "asking";
   if (session.unknown) return "unknown";
-  if (session.base === "idle" && agentCount(session) > 0) return "background";
+  if (session.base === "idle" && agentCount(session) > 0) return "subagents";
   if (session.base === "idle" && session.shellTasks > 0) return "waiting";
   return session.base;
 }
@@ -132,7 +132,7 @@ function detail(session: Session, state: SemanticState): SessionDetail | null {
     return session.activeTool
       ? { kind: "tool", tool: session.activeTool.name }
       : null;
-  if (state === "background")
+  if (state === "subagents")
     return { kind: "agents", count: agentCount(session) };
   if (state === "waiting") return { kind: "tasks", count: session.shellTasks };
   return null;

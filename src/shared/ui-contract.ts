@@ -1,7 +1,7 @@
 export const semanticStates = [
   "idle",
   "waiting",
-  "background",
+  "subagents",
   "working",
   "unknown",
   "asking",
@@ -10,7 +10,7 @@ export type SemanticState = (typeof semanticStates)[number];
 export const stateLabels: Record<SemanticState, string> = {
   idle: "Idle",
   waiting: "Waiting",
-  background: "Background",
+  subagents: "Subagents",
   working: "Working",
   unknown: "Unknown",
   asking: "Asking",

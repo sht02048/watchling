@@ -46,7 +46,7 @@ const [back, front] = ["#back", "#front"].map((id) =>
   document.querySelector<HTMLCanvasElement>(id)!,
 ) as [HTMLCanvasElement, HTMLCanvasElement];
 const pet = createPet(document.querySelector<HTMLCanvasElement>("#pet")!);
-pet.setState("background");
+pet.setState("subagents");
 
 const inputs = new Map<NumberKey, [HTMLInputElement, HTMLOutputElement]>();
 for (const [key, label, min, max, step] of knobs) {
@@ -196,7 +196,7 @@ function frame(now: number): void {
       width: box.width,
       height: box.height,
       ratio,
-      palette: PALETTE.background,
+      palette: PALETTE.subagents,
     },
   );
   requestAnimationFrame(frame);

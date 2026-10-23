@@ -97,7 +97,7 @@ const resting = (state: SemanticState): boolean =>
 const POSES: Record<SemanticState, Pose> = {
   idle: IDLE,
   waiting: { ...IDLE, speed: 0.5, wave: 0.05, field: 0.55 },
-  background: {
+  subagents: {
     ...IDLE,
     amp: 0.035,
     speed: 0.9,
@@ -161,7 +161,7 @@ const lch = (l: number, c: number, h: number): OKLab => [
 export const PALETTE: Record<SemanticState, readonly [OKLab, OKLab]> = {
   idle: [lch(0.88, 0.07, 60), lch(0.74, 0.14, 25)],
   waiting: [lch(0.9, 0.075, 150), lch(0.74, 0.11, 160)],
-  background: [lch(0.88, 0.07, 215), lch(0.7, 0.12, 255)],
+  subagents: [lch(0.88, 0.07, 215), lch(0.7, 0.12, 255)],
   working: [lch(0.9, 0.11, 90), lch(0.76, 0.16, 55)],
   asking: [lch(0.86, 0.11, 310), lch(0.66, 0.17, 300)],
   unknown: [lch(0.87, 0.025, 295), lch(0.72, 0.045, 285)],

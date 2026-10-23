@@ -9,7 +9,7 @@ import {
 export const choices = [
   { id: "work", label: "Work on a task", state: "working" },
   { id: "ask", label: "Ask for permission", state: "asking" },
-  { id: "agents", label: "Run background agents", state: "background" },
+  { id: "agents", label: "Run background agents", state: "subagents" },
   { id: "disconnect", label: "Lose the connection", state: "unknown" },
 ] as const satisfies readonly {
   id: string;
@@ -223,11 +223,11 @@ export function createDemo(options: {
     set("working", { kind: "tool", tool: "Task" });
     stream(AGENT_LINES, () => {
       agentsLeft = [...AGENT_NAMES];
-      set("background", { kind: "agents", count: agentsLeft.length });
+      set("subagents", { kind: "agents", count: agentsLeft.length });
       terminal.lines.push(
         peep(
           "The main turn is done, but 2 agents still run. They ride on my head until they finish.",
-          "background",
+          "subagents",
         ),
       );
       terminal.prompt = { kind: "agents" };
@@ -243,7 +243,7 @@ export function createDemo(options: {
     if (name === undefined) return;
     terminal.lines.push({ kind: "result", text: `Agent "${name}" finished` });
     if (agentsLeft.length > 0) {
-      set("background", { kind: "agents", count: agentsLeft.length });
+      set("subagents", { kind: "agents", count: agentsLeft.length });
       options.onChange();
       return;
     }
@@ -316,7 +316,7 @@ export function createDemo(options: {
         } satisfies SessionSummary,
       ],
       companions:
-        terminal.state === "background" && terminal.detail?.kind === "agents"
+        terminal.state === "subagents" && terminal.detail?.kind === "agents"
           ? terminal.detail.count
           : 0,
     };

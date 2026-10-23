@@ -40,7 +40,7 @@ function summary(session: SessionSummary): string {
       return detail?.kind === "tool"
         ? `Running ${tool(detail.tool)}`
         : "Working";
-    case "background":
+    case "subagents":
       return plural(
         detail?.kind === "agents" ? detail.count : 0,
         "background agent",

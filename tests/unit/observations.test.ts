@@ -641,15 +641,15 @@ test("background subagents keep a finished turn in the background state", () => 
   feed(observations, event("UserPromptSubmit"), launch("a1"), launch("a2"));
   assert.equal(stateOf(observations), "working");
   feed(observations, event("Stop"));
-  assert.equal(stateOf(observations), "background");
-  assert.equal(observations.snapshot().state, "background");
+  assert.equal(stateOf(observations), "subagents");
+  assert.equal(observations.snapshot().state, "subagents");
   feed(
     observations,
     event("PreToolUse", { agentId: "a1", toolName: "Bash", toolUseId: "b1" }),
   );
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   feed(observations, event("SubagentStop", { agentId: "a1" }));
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   feed(observations, event("SubagentStop", { agentId: "a2" }));
   assert.equal(stateOf(observations), "idle");
 });
@@ -667,7 +667,7 @@ test("a background subagent resumed with SendMessage rides again until it stops"
     }),
     event("Stop"),
   );
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   assert.equal(observations.snapshot().companions, 1);
   feed(observations, event("SubagentStop", { agentId: "a1" }));
   assert.equal(stateOf(observations), "idle");
@@ -726,7 +726,7 @@ test("an empty background task list clears background agents", () => {
       backgroundTasks: [{ id: "x", type: "agent", status: "running" }],
     }),
   );
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   feed(observations, event("Stop", { backgroundTasks: [] }));
   assert.equal(stateOf(observations), "idle");
 });
@@ -774,11 +774,11 @@ test("workflow subagents keep a finished turn in the background state", () => {
     workflowStart("w2"),
     event("Stop", { backgroundTasks: [] }),
   );
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   assert.equal(observations.snapshot().companions, 2);
   assert.deepEqual(only(observations).detail, { kind: "agents", count: 2 });
   feed(observations, event("SubagentStop", { agentId: "w1" }));
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   feed(observations, event("SubagentStop", { agentId: "w2" }));
   assert.equal(stateOf(observations), "idle");
   assert.equal(observations.snapshot().companions, 0);
@@ -806,7 +806,7 @@ test("duplicate workflow starts count once and stray stops are ignored", () => {
     workflowStart("w1"),
     event("SubagentStop", { agentId: "ghost" }),
   );
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   assert.equal(observations.snapshot().companions, 1);
   assert.deepEqual(only(observations).detail, { kind: "agents", count: 1 });
 });
@@ -817,9 +817,9 @@ test("workflow agent overflow marks the session unknown", () => {
     observations,
     ...Array.from({ length: 32 }, (_, index) => workflowStart(`w${index}`)),
   );
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   feed(observations, workflowStart("w0"));
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   feed(observations, workflowStart("w32"));
   assert.equal(stateOf(observations), "unknown");
 });
@@ -842,7 +842,7 @@ test("workflow and async agents share the background state and companions", () =
   assert.equal(stateOf(observations), "working");
   assert.equal(observations.snapshot().companions, 3);
   feed(observations, event("Stop", { backgroundTasks: [] }));
-  assert.equal(stateOf(observations), "background");
+  assert.equal(stateOf(observations), "subagents");
   assert.deepEqual(only(observations).detail, { kind: "agents", count: 3 });
   feed(
     observations,
@@ -1121,7 +1121,7 @@ test("a background agent launched before a restart reappears with its next event
       toolUseId: "t1",
     }),
   );
-  assert.equal(observations.snapshot().state, "background");
+  assert.equal(observations.snapshot().state, "subagents");
   assert.equal(observations.snapshot().companions, 1);
   feed(
     observations,
@@ -1225,7 +1225,7 @@ test("background agents outrank waiting, and other task types are not shell task
       ],
     }),
   );
-  assert.equal(observations.snapshot().state, "background");
+  assert.equal(observations.snapshot().state, "subagents");
   feed(observations, event("SubagentStop", { agentId: "agent-1" }));
   assert.equal(observations.snapshot().state, "waiting");
   feed(
@@ -1261,7 +1261,7 @@ test("a shell-only task list clears a background agent whose stop was missed", (
       toolUseId: "t1",
     }),
   );
-  assert.equal(observations.snapshot().state, "background");
+  assert.equal(observations.snapshot().state, "subagents");
   feed(
     observations,
     event("SubagentStop", {

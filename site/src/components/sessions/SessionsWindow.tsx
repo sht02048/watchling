@@ -25,7 +25,7 @@ function summary(session: SessionSummary): string {
         : "Needs approval";
     case "working":
       return detail?.kind === "tool" ? `Running ${detail.tool}` : "Working";
-    case "background":
+    case "subagents":
       return plural(
         detail?.kind === "agents" ? detail.count : 0,
         "background agent",
