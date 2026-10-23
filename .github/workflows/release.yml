@@ -12,19 +12,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   release:
+    needs: ci
     runs-on: macos-15
     env:
       LEFTHOOK: "0"
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 24
-          cache: pnpm
+          persist-credentials: false
 
       - name: Check that the tag matches package.json
         run: |
@@ -34,12 +33,10 @@ jobs:
             exit 1
           fi
 
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
 
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test:unit
-      - run: pnpm test:integration
 
       - name: Import the signing certificate and notary key
         env:
@@ -56,6 +53,7 @@ jobs:
           security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
           rm "$RUNNER_TEMP/cert.p12"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          # shellcheck disable=SC2046 # Each existing keychain path is a separate argument.
           security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
           security find-identity -v -p codesigning "$keychain" | grep -q "Developer ID Application"
           echo "$APPLE_API_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
@@ -75,6 +73,17 @@ jobs:
           codesign -dvv "$app" 2>&1 | grep -q "Authority=Developer ID Application"
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose "$app"
+          helper="$app/Contents/Resources/helpers/watchling-hook-emitter"
+          codesign -dvv "$helper" 2>&1 | grep -q "Authority=Developer ID Application"
+          codesign -dvv "$helper" 2>&1 | grep -q "flags=0x10000(runtime)"
+          # Signing defaults also grant camera, microphone, location and photos.
+          for binary in "$app" "$helper"; do
+            entitlements="$(codesign -d --entitlements - --xml "$binary" 2>/dev/null | plutil -convert json -o - -)"
+            if [ "$entitlements" != '{"com.apple.security.cs.allow-jit":true}' ]; then
+              echo "::error::Unexpected entitlements for $binary: $entitlements"
+              exit 1
+            fi
+          done
           hdiutil detach "$mount"
 
       - name: Publish the release

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    paths-ignore: &docs
+      - "**/*.md"
+      - "docs/**"
+      - LICENSE
+  push:
+    branches: [main]
+    paths-ignore: *docs
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint the workflows
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
+
+  test:
+    runs-on: macos-15
+    env:
+      LEFTHOOK: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup
+
+      - run: pnpm test:unit
+      - run: pnpm test:integration
+      - run: swift test --package-path native/hook-emitter

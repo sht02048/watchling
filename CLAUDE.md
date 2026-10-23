@@ -16,6 +16,8 @@ Watchling is a macOS desktop pet (named Peep) that shows what your Claude Code s
 | `pnpm make` | `package` plus `build/release/make/dmg/arm64/Watchling.dmg` and the unfused app for Playwright in `build/unfused/` |
 | `pnpm release` | Builds the DMG and uploads it to a draft GitHub release of `sht02048/watchling`. Needs `GITHUB_TOKEN`; publishes outside the machine, so run only when asked. |
 
+`.github/workflows/ci.yml` runs actionlint plus the unit, integration and Swift tests on pull requests and pushes to `main`; lint, format and type checks are left to the pre-commit hook, and nothing is built there. Actions are pinned to commit SHAs and updated by Dependabot (`.github/dependabot.yml`).
+
 Releases normally come from `.github/workflows/release.yml`: set `version` in `package.json`, commit, then push a matching tag (`git tag v0.1.0 && git push origin v0.1.0`). It lints, type-checks, runs the unit and integration tests, builds the DMG on a macOS arm64 runner, signs it with Developer ID and notarizes it, and publishes a GitHub release with `Watchling.dmg`; tags with a `-` suffix become prereleases. Signing uses the repository secrets `MACOS_CERT_P12`, `MACOS_CERT_PASSWORD`, `APPLE_API_KEY` (base64 `.p8`), `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`. Local builds stay ad-hoc signed unless `APPLE_API_KEY` (a `.p8` path), `APPLE_API_KEY_ID` and `APPLE_API_ISSUER` are set. The site's download buttons point at `releases/latest/download/Watchling.dmg`, so keep that file name. Pushing a tag publishes outside the machine, so do it only when asked.
 | `pnpm playground` | Browser labs for pet states, companions and the asking cue at http://127.0.0.1:5178/ |
 | `pnpm lint` / `pnpm lint:fix` | oxlint (`.oxlintrc.json`) |
