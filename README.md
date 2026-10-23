@@ -16,7 +16,7 @@
   <img src="docs/assets/watchling.gif" width="800" alt="Peep turns orange while Claude works, carries companions for background agents, turns purple with a speech bubble when a session needs you, and opens the session list on click">
 </p>
 
-Start a long task, switch to something else, and look up when Peep turns purple. Peep busies itself while Claude works, carries little companions when background agents run, and pops a speech bubble when a session is waiting for your approval or answer. Watchling only watches: it never answers prompts or approves tools for you.
+Start a long task, switch to something else, and look up when Peep turns purple. Click the waiting session in the list to jump straight back to its terminal. Peep busies itself while Claude works, carries little companions when background agents run, and pops a speech bubble when a session is waiting for your approval or answer. Watchling only watches: it never answers prompts or approves tools for you.
 
 ## Features
 
@@ -24,6 +24,7 @@ Start a long task, switch to something else, and look up when Peep turns purple.
 - **Attention bubble** — a purple speech bubble when a session needs approval or an answer, with no sounds or notifications
 - **Background companions** — up to three small companions ride on Peep's head while background agents run
 - **Session list** — click Peep to see every session grouped by project, with what it's doing and for how long
+- **Jump to a session** — click a session to bring its terminal forward; in Orca it opens the exact tab
 - **Auto-connect** — hooks install on first launch and can be turned off from the menu bar
 - **Local and read-only** — nothing leaves your Mac, and Watchling never changes a session
 
@@ -54,9 +55,23 @@ With several sessions open, Peep shows the one highest in this table. See [docs/
 
 ### Session list
 
-<!-- Image: session list grouped by project -->
+<p align="center">
+  <img src="docs/assets/session-list.png" width="320" alt="The session list: api-server waits for approval of Bash and is highlighted in purple, web-app and a docs-site session are working, and every line that can jump to its terminal ends in a chevron except infra, which runs without a GUI app">
+</p>
 
-Click Peep to open the list, and click again or press <kbd>Esc</kbd> to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Click a line marked › to bring its terminal app to the front; in Orca it also switches to the session's tab. Right-click a line for a menu that also copies its session ID, or press <kbd>⌘C</kbd> on it. <kbd>↑</kbd> <kbd>↓</kbd> move between lines and <kbd>Return</kbd> opens one.
+Click Peep to open the list, and click again or press <kbd>Esc</kbd> to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Right-click a line for a menu that also copies its session ID, or press <kbd>⌘C</kbd> on it.
+
+### Jump to a session
+
+When Peep turns purple, open the list and click the waiting session. Watchling brings the app that runs it to the front, so you can answer without hunting through windows. Lines you can jump from end in ›, and <kbd>↑</kbd> <kbd>↓</kbd> then <kbd>Return</kbd> work too.
+
+| Where the session runs                               | What a click does             |
+| ---------------------------------------------------- | ----------------------------- |
+| Orca                                                 | Switches to the session's tab |
+| Terminal, iTerm, Ghostty, VS Code, Cursor and others | Brings the app to the front   |
+| SSH or no GUI app                                    | Nothing; the line has no ›    |
+
+Watchling only changes which window is in front. It never types into a terminal.
 
 ### Menu bar
 
