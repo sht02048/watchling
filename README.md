@@ -56,7 +56,7 @@ With several sessions open, Peep shows the one highest in this table. See [docs/
 
 <!-- Image: session list grouped by project -->
 
-Click Peep to open the list, and click again or press <kbd>Esc</kbd> to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Hover a line to see the full session ID and copy it.
+Click Peep to open the list, and click again or press <kbd>Esc</kbd> to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Hover a line to see the full session ID and copy it. Click a line to bring its terminal app to the front; in Orca it also switches to the session's tab.
 
 ### Menu bar
 
@@ -72,7 +72,7 @@ Watchling adds hooks to `~/.claude/settings.json`. For each event, Claude Code r
 
 ## Privacy
 
-The helper sends event metadata such as session and tool IDs, the event type, tool names, permission mode and the project folder name. While the app is closed, that metadata waits on disk until the next launch. Prompts, tool input and transcripts are never stored, shown or sent. Tool input is reduced to a one-way fingerprint inside the helper so permission requests can be matched to their tool calls. Watchling makes no network requests.
+The helper sends event metadata such as session and tool IDs, the event type, tool names, permission mode, the project folder name, and which app runs the session (its bundle ID and, in Orca, the terminal tab handle). While the app is closed, that metadata waits on disk until the next launch. Prompts, tool input and transcripts are never stored, shown or sent. Tool input is reduced to a one-way fingerprint inside the helper so permission requests can be matched to their tool calls. Watchling makes no network requests.
 
 ## FAQ
 

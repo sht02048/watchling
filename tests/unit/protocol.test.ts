@@ -256,3 +256,32 @@ test("interactivity and input fingerprints are bounded metadata", () => {
     false,
   );
 });
+test("terminal locations are bounded identifiers", () => {
+  const located = {
+    ...event,
+    terminalApp: "com.stablyai.orca",
+    orcaTerminal: "term_ed6717a3-a9b4-475c-b51a-bf72e39228c3",
+  };
+  assert.equal(isClaudeEvent(located), true);
+  for (const terminalApp of [
+    "",
+    "Terminal",
+    ".com.apple",
+    "com..apple",
+    "-a.b",
+    "com.-x",
+    "com apple",
+    "com/apple.x",
+    `${"a.".repeat(128)}b`,
+    1,
+  ])
+    assert.equal(isClaudeEvent({ ...located, terminalApp }), false);
+  for (const orcaTerminal of [
+    "term_",
+    "term_a b",
+    "term_../x",
+    "pane_1",
+    `term_${"a".repeat(129)}`,
+  ])
+    assert.equal(isClaudeEvent({ ...located, orcaTerminal }), false);
+});

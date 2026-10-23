@@ -123,6 +123,28 @@ function copy(session: SessionSummary): HTMLButtonElement {
   return button;
 }
 
+function open(
+  session: SessionSummary,
+  text: string,
+  child: boolean,
+): HTMLButtonElement {
+  const button = el("button", "open");
+  button.type = "button";
+  button.title = `${session.project} · ${text}\n${session.id}`;
+  button.setAttribute(
+    "aria-label",
+    [
+      `Show the terminal for ${session.project}`,
+      ...(child ? [`session ${session.shortId}…`] : []),
+      text,
+    ].join(", "),
+  );
+  button.addEventListener("click", () =>
+    window.watchling.focusSession(session.id),
+  );
+  return button;
+}
+
 function line(
   session: SessionSummary,
   label: HTMLElement,
@@ -137,6 +159,10 @@ function line(
   detail.title = text;
   const name = el("span", "name");
   name.append(label, copy(session));
+  if (session.focusable) {
+    row.classList.add("focusable");
+    row.append(open(session, text, className.includes("child")));
+  }
   row.append(...dot(session), name, detail, time(session));
   row.title = session.id;
   return row;

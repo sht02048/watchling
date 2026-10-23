@@ -27,6 +27,7 @@ export interface SessionSummary {
   state: SemanticState;
   since: number;
   detail: SessionDetail | null;
+  focusable?: true;
 }
 
 export interface Snapshot {
@@ -64,6 +65,7 @@ export interface PetBridge {
   openSessionList(): void;
   closeSessionList(): void;
   copySessionId(id: string): void;
+  focusSession(id: string): void;
 }
 
 declare global {

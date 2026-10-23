@@ -28,6 +28,7 @@ import {
   type CollectorOptions,
 } from "../integration/claude/collector.ts";
 import { attachIpc } from "./ipc.ts";
+import { focusTerminal } from "./terminal-focus.ts";
 import { clampWindow, expand, listPosition } from "./geometry.ts";
 import { PositionStore } from "./position-store.ts";
 import type { ClaudeConnection } from "./connection.ts";
@@ -80,6 +81,7 @@ let connection:
     >
   | undefined;
 let connected = false;
+let focusing: Promise<void> | null = null;
 let collector: Awaited<ReturnType<typeof startCollector>> | undefined;
 let publisher: ReturnType<typeof createSnapshotPublisher> | undefined;
 let quitting = false;
@@ -432,6 +434,14 @@ async function start(options: DesktopOptions): Promise<void> {
     openList: showList,
     closeList: () => list?.hide(),
     copy: (text) => clipboard.writeText(text),
+    focus: (id) => {
+      const terminal = observations.terminal(id);
+      if (!terminal || focusing) return;
+      hideList();
+      focusing = focusTerminal(terminal).finally(() => {
+        focusing = null;
+      });
+    },
   });
   pet.webContents.on("render-process-gone", () => {
     console.error("Pet renderer exited");

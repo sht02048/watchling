@@ -30,6 +30,8 @@ public struct ClaudeEvent: Encodable, Equatable, Sendable {
     public let backgroundTasks: [BackgroundTask]?
     public let inputFingerprint: String?
     public var interactive: Bool?
+    public var terminalApp: String?
+    public var orcaTerminal: String?
 }
 
 public enum EventProjection {

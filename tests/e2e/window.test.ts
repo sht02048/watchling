@@ -194,7 +194,13 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
           "--descriptor",
           join(native.userData, "endpoint.json"),
         ],
-        { timeout: 1000 },
+        {
+          timeout: 1000,
+          env: {
+            PATH: process.env.PATH,
+            __CFBundleIdentifier: "com.example.terminal",
+          },
+        },
         (error, stdout, stderr) => {
           if (error) return reject(error);
           try {
@@ -230,6 +236,7 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
           state: "idle",
           since: expect.any(Number),
           detail: null,
+          focusable: true,
         },
       ]);
     await expect(sessionPage!.locator("#total")).toHaveText("1 session");
@@ -238,6 +245,9 @@ test("native pet uses isolated UI, continuous animation and a read-only list", a
     const row = sessionPage!.locator("#sessions > li.row");
     await expect(row).toHaveCount(1);
     await expect(row.locator(".project")).toHaveText("fixture-project");
+    await expect(row.locator("button.open")).toHaveAccessibleName(
+      "Show the terminal for fixture-project, Idle",
+    );
     await expect(row.locator(".id")).toHaveCount(0);
     await expect(row.locator(".detail")).toHaveText("Idle");
     await expect(row.locator(".time")).toHaveText(/^\d+:\d{2}$/);

@@ -354,10 +354,12 @@ private func emit(
     return sent ? .sent : .failed
 }
 
-private func markInteractivity(_ event: inout ClaudeEvent, deadline: Deadline) {
+private func markEnvironment(_ event: inout ClaudeEvent, deadline: Deadline) {
+    let environment = ProcessInfo.processInfo.environment
+    TerminalLocation.mark(&event, environment: environment)
     guard event.eventName == "PermissionRequest" || event.eventName == "Notification" else { return }
     event.interactive = ProcessAncestry.interactivity(
-        environment: ProcessInfo.processInfo.environment, start: Darwin.getppid(),
+        environment: environment, start: Darwin.getppid(),
         table: DarwinProcessTable(), isActive: { deadline.isActive }
     )
 }
@@ -451,12 +453,12 @@ private func spoolOffline(_ bytes: Data, descriptorPath: AbsolutePath, uid: uid_
         guard var live = EventProjection.project(
             bytes, fingerprintKey: InputFingerprint.key(token: descriptor.token)
         ), deadline.isActive else { return }
-        markInteractivity(&live, deadline: deadline)
+        markEnvironment(&live, deadline: deadline)
         guard emit(live, descriptor: descriptor, uid: uid, deadline: deadline) == .offline else { return }
     case .absent:
         break
     }
-    markInteractivity(&event, deadline: deadline)
+    markEnvironment(&event, deadline: deadline)
     let table = DarwinProcessTable()
     guard let pid = ProcessAncestry.claudeProcess(
         environment: ProcessInfo.processInfo.environment, start: Darwin.getppid(),
@@ -525,7 +527,7 @@ private func run(deadline: Deadline) {
     #if WATCHLING_NATIVE_TRACE
     diagnosticTrace.record(.projectionEnd)
     #endif
-    markInteractivity(&event, deadline: deadline)
+    markEnvironment(&event, deadline: deadline)
     if emit(event, descriptor: descriptor, uid: uid, deadline: deadline) == .offline {
         spoolOffline(bytes, descriptorPath: descriptorPath, uid: uid, deadline: deadline)
     }

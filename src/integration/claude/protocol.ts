@@ -36,6 +36,8 @@ export interface ClaudeEvent {
   backgroundTasks?: { id: string; type: string; status: string }[];
   interactive?: boolean;
   inputFingerprint?: string;
+  terminalApp?: string;
+  orcaTerminal?: string;
 }
 export interface Endpoint {
   version: 1;
@@ -102,6 +104,8 @@ const fields = new Set([
   "backgroundTasks",
   "interactive",
   "inputFingerprint",
+  "terminalApp",
+  "orcaTerminal",
 ]);
 const fingerprintedEvents = [
   "PreToolUse",
@@ -140,6 +144,25 @@ export function isClaudeEvent(value: unknown): value is ClaudeEvent {
   for (const field of ["isInterrupt", "stopHookActive", "interactive"]) {
     if (field in value && typeof value[field] !== "boolean") return false;
   }
+  if (
+    "terminalApp" in value &&
+    !(
+      typeof value.terminalApp === "string" &&
+      value.terminalApp.length <= 255 &&
+      /^[A-Za-z0-9][A-Za-z0-9-]*(\.[A-Za-z0-9][A-Za-z0-9-]*)+$/.test(
+        value.terminalApp,
+      )
+    )
+  )
+    return false;
+  if (
+    "orcaTerminal" in value &&
+    !(
+      typeof value.orcaTerminal === "string" &&
+      /^term_[A-Za-z0-9-]{1,128}$/.test(value.orcaTerminal)
+    )
+  )
+    return false;
   if (
     "notificationType" in value &&
     value.notificationType !== "permission_prompt"

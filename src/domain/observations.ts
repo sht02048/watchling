@@ -19,8 +19,14 @@ interface Ask {
   order: number;
 }
 
+export interface TerminalLocation {
+  app?: string;
+  orcaTerminal?: string;
+}
+
 interface Session {
   project: string;
+  terminal: TerminalLocation | null;
   base: "idle" | "working";
   unknown: boolean;
   idAsks: Map<string, Ask>;
@@ -174,6 +180,7 @@ export class Observations {
       }
       session = {
         project: event.project,
+        terminal: null,
         base: "idle",
         unknown: (this.lossSeen || lost) && !opensTurn,
         idAsks: new Map(),
@@ -190,6 +197,11 @@ export class Observations {
       this.sessions.set(event.sessionId, session);
     }
     session.project = event.project;
+    if (event.terminalApp || event.orcaTerminal)
+      session.terminal = {
+        ...(event.terminalApp ? { app: event.terminalApp } : {}),
+        ...(event.orcaTerminal ? { orcaTerminal: event.orcaTerminal } : {}),
+      };
     if (event.backgroundTasks?.length === 0) session.background.clear();
     const activity = (): void => {
       if (!(event.agentId && session.base === "idle")) session.base = "working";
@@ -340,6 +352,10 @@ export class Observations {
     this.failed = true;
   }
 
+  terminal(sessionId: string): TerminalLocation | null {
+    return this.sessions.get(sessionId)?.terminal ?? null;
+  }
+
   snapshot(): Snapshot {
     const ids = [...this.sessions.keys()];
     const states = ids.map((id) => display(this.sessions.get(id)!));
@@ -375,6 +391,7 @@ export class Observations {
           state: states[index]!,
           since: session.since,
           detail: detail(session, states[index]!),
+          ...(session.terminal ? { focusable: true as const } : {}),
         };
       }),
     };

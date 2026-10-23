@@ -1078,3 +1078,31 @@ test("a session lost while the app was closed is unknown until its next turn", (
   assert.equal(stateOf(observations, "session-3"), "unknown");
   assert.equal(observations.snapshot().state, "unknown");
 });
+test("a session's terminal comes from its latest located event", () => {
+  const observations = new Observations();
+  feed(observations, event("SessionStart"));
+  assert.equal(observations.terminal("session-1"), null);
+  assert.equal(observations.snapshot().sessions[0]!.focusable, undefined);
+  feed(
+    observations,
+    event("UserPromptSubmit", {
+      terminalApp: "com.stablyai.orca",
+      orcaTerminal: "term_1",
+    }),
+    event("Stop"),
+  );
+  assert.deepEqual(observations.terminal("session-1"), {
+    app: "com.stablyai.orca",
+    orcaTerminal: "term_1",
+  });
+  assert.equal(observations.snapshot().sessions[0]!.focusable, true);
+  feed(
+    observations,
+    event("UserPromptSubmit", { terminalApp: "com.apple.Terminal" }),
+  );
+  assert.deepEqual(observations.terminal("session-1"), {
+    app: "com.apple.Terminal",
+  });
+  feed(observations, event("SessionEnd"));
+  assert.equal(observations.terminal("session-1"), null);
+});

@@ -21,6 +21,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import { startCollector } from "../../src/integration/claude/collector.ts";
 import type { ClaudeEvent } from "../../src/integration/claude/protocol.ts";
 
+// Events are compared whole, so the terminal running the tests must not leak into them.
+delete process.env.__CFBundleIdentifier;
+delete process.env.ORCA_TERMINAL_HANDLE;
+
 const stage = {
   mainEntry: 1,
   descriptorBegin: 2,
@@ -468,6 +472,7 @@ async function compileFixture(name: string, source: string) {
       "native/hook-emitter/Sources/HookProtocol/EventProjection.swift",
       "native/hook-emitter/Sources/HookProtocol/InputFingerprint.swift",
       "native/hook-emitter/Sources/HookProtocol/ProcessAncestry.swift",
+      "native/hook-emitter/Sources/HookProtocol/TerminalLocation.swift",
       "-emit-module-path",
       join(fixtureDirectory, "HookProtocol.swiftmodule"),
       "-o",

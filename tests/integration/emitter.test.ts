@@ -22,6 +22,10 @@ import {
   type ClaudeEvent,
 } from "../../src/integration/claude/protocol.ts";
 
+// Events are compared whole, so the terminal running the tests must not leak into them.
+delete process.env.__CFBundleIdentifier;
+delete process.env.ORCA_TERMINAL_HANDLE;
+
 const binary = join(
   execFileSync(
     "swift",
@@ -173,6 +177,7 @@ test("independent watchdog exits successfully while the main thread is blocked",
         "native/hook-emitter/Sources/HookProtocol/EventProjection.swift",
         "native/hook-emitter/Sources/HookProtocol/InputFingerprint.swift",
         "native/hook-emitter/Sources/HookProtocol/ProcessAncestry.swift",
+        "native/hook-emitter/Sources/HookProtocol/TerminalLocation.swift",
         "-emit-module-path",
         join(directory, "HookProtocol.swiftmodule"),
         "-o",
@@ -255,6 +260,65 @@ test("actual Swift helper delivers only metadata to the private collector", asyn
       stalled.elapsed >= 120,
       "Live-endpoint probe must actually exercise the stdin deadline",
     );
+  } finally {
+    await collector.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("events carry the terminal that runs the session", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "watchling-emitter-test-"));
+  const events: ClaudeEvent[] = [];
+  const collector = await startCollector({
+    directory,
+    onEvent: (event) => events.push(event),
+    onLoss: () => assert.fail("Valid emitter delivery lost"),
+  });
+  try {
+    const start = {
+      hook_event_name: "SessionStart",
+      session_id: "session-terminal",
+      cwd: "/private/terminal-project",
+    };
+    for (const [env, expected] of [
+      [
+        {
+          __CFBundleIdentifier: "com.stablyai.orca",
+          ORCA_TERMINAL_HANDLE: "term_ed6717a3-a9b4-475c-b51a-bf72e39228c3",
+        },
+        {
+          terminalApp: "com.stablyai.orca",
+          orcaTerminal: "term_ed6717a3-a9b4-475c-b51a-bf72e39228c3",
+        },
+      ],
+      [
+        {
+          __CFBundleIdentifier: "com apple",
+          ORCA_TERMINAL_HANDLE: "term_../x",
+        },
+        {},
+      ],
+    ] as const) {
+      events.length = 0;
+      safe(
+        await run(
+          collector.descriptorPath,
+          JSON.stringify(start),
+          undefined,
+          binary,
+          { ...process.env, ...env },
+        ),
+      );
+      for (let i = 0; i < 400 && events.length === 0; i++) await delay(5);
+      assert.deepEqual(events, [
+        {
+          eventName: "SessionStart",
+          sessionId: "session-terminal",
+          project: "terminal-project",
+          ...expected,
+        },
+      ]);
+    }
   } finally {
     await collector.close();
     await rm(directory, { recursive: true, force: true });
