@@ -1096,6 +1096,7 @@ test("a session's terminal comes from its latest located event", () => {
     orcaTerminal: "term_1",
   });
   assert.equal(observations.snapshot().sessions[0]!.focusable, true);
+  assert.equal(observations.snapshot().sessions[0]!.terminalName, "Orca");
   feed(
     observations,
     event("UserPromptSubmit", { terminalApp: "com.apple.Terminal" }),
@@ -1103,6 +1104,10 @@ test("a session's terminal comes from its latest located event", () => {
   assert.deepEqual(observations.terminal("session-1"), {
     app: "com.apple.Terminal",
   });
+  assert.equal(observations.snapshot().sessions[0]!.terminalName, "Terminal");
+  feed(observations, event("Stop", { terminalApp: "com.example.unknown" }));
+  assert.equal(observations.snapshot().sessions[0]!.focusable, true);
+  assert.equal(observations.snapshot().sessions[0]!.terminalName, undefined);
   feed(observations, event("SessionEnd"));
   assert.equal(observations.terminal("session-1"), null);
 });

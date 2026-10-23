@@ -56,7 +56,7 @@ With several sessions open, Peep shows the one highest in this table. See [docs/
 
 <!-- Image: session list grouped by project -->
 
-Click Peep to open the list, and click again or press <kbd>Esc</kbd> to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Hover a line to see the full session ID and copy it. Click a line to bring its terminal app to the front; in Orca it also switches to the session's tab.
+Click Peep to open the list, and click again or press <kbd>Esc</kbd> to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Click a line marked › to bring its terminal app to the front; in Orca it also switches to the session's tab. Right-click a line for a menu that also copies its session ID, or press <kbd>⌘C</kbd> on it. <kbd>↑</kbd> <kbd>↓</kbd> move between lines and <kbd>Return</kbd> opens one.
 
 ### Menu bar
 

@@ -99,50 +99,11 @@ function icon(className: string, paths: string[]): SVGSVGElement {
   return svg;
 }
 
-function copy(session: SessionSummary): HTMLButtonElement {
-  const button = el("button", "copy");
-  button.append(
-    icon("icon-copy", [
-      "M7 5.25h5a1.75 1.75 0 0 1 1.75 1.75v5A1.75 1.75 0 0 1 12 13.75H7A1.75 1.75 0 0 1 5.25 12V7A1.75 1.75 0 0 1 7 5.25Z",
-      "M2.25 10.25v-6.5c0-.83.67-1.5 1.5-1.5h6.5",
-    ]),
-    icon("icon-done", ["M3 8.5l3.25 3.25L13 4.75"]),
-  );
-  button.type = "button";
-  button.title = `Copy session ID ${session.id}`;
-  button.setAttribute("aria-label", `Copy session ID ${session.id}`);
-  button.addEventListener("click", () => {
-    window.watchling.copySessionId(session.id);
-    button.classList.add("copied");
-    button.setAttribute("aria-label", "Copied");
-    setTimeout(() => {
-      button.classList.remove("copied");
-      button.setAttribute("aria-label", `Copy session ID ${session.id}`);
-    }, 1500);
-  });
-  return button;
-}
-
-function open(
-  session: SessionSummary,
-  text: string,
-  child: boolean,
-): HTMLButtonElement {
-  const button = el("button", "open");
-  button.type = "button";
-  button.title = `${session.project} · ${text}\n${session.id}`;
-  button.setAttribute(
-    "aria-label",
-    [
-      `Show the terminal for ${session.project}`,
-      ...(child ? [`session ${session.shortId}…`] : []),
-      text,
-    ].join(", "),
-  );
-  button.addEventListener("click", () =>
-    window.watchling.focusSession(session.id),
-  );
-  return button;
+function chevron(session: SessionSummary): HTMLElement {
+  const cell = el("span", "go");
+  if (!session.focusable) return cell;
+  cell.append(icon("icon-go", ["M6.25 3.75 10.5 8l-4.25 4.25"]));
+  return cell;
 }
 
 function line(
@@ -156,16 +117,45 @@ function line(
   );
   const text = summary(session);
   const detail = el("span", "detail", text);
-  detail.title = text;
-  const name = el("span", "name");
-  name.append(label, copy(session));
+  row.dataset.session = session.id;
+  row.tabIndex = -1;
+  row.setAttribute("aria-keyshortcuts", "Meta+C Shift+F10");
+  row.title = [
+    ...(session.focusable
+      ? [
+          session.terminalName
+            ? `Show in ${session.terminalName}`
+            : "Show Terminal",
+        ]
+      : []),
+    `${session.project} · ${text}`,
+    `Session ${session.id}`,
+  ].join("\n");
   if (session.focusable) {
     row.classList.add("focusable");
-    row.append(open(session, text, className.includes("child")));
+    row.setAttribute("role", "button");
   }
-  row.append(...dot(session), name, detail, time(session));
-  row.title = session.id;
+  row.append(...dot(session), label, detail, time(session), chevron(session));
   return row;
+}
+
+function sessionRows(): HTMLElement[] {
+  return [...entries!.querySelectorAll<HTMLElement>("li[data-session]")];
+}
+
+function rove(
+  row: HTMLElement | undefined,
+  focus: "scroll" | "keep" | "none" = "scroll",
+): void {
+  if (!row) return;
+  for (const other of sessionRows()) other.tabIndex = other === row ? 0 : -1;
+  if (focus !== "none") row.focus({ preventScroll: focus === "keep" });
+}
+
+function activeRow(): HTMLElement | null {
+  return document.activeElement instanceof HTMLElement
+    ? document.activeElement.closest<HTMLElement>("li[data-session]")
+    : null;
 }
 
 function render(snapshot: Snapshot): void {
@@ -190,11 +180,11 @@ function render(snapshot: Snapshot): void {
   for (const [project, group] of projects) {
     const lead = group[0]!;
     const name = el("span", "project", project);
-    name.title = project;
     if (group.length === 1) {
       rows.push(line(lead, name));
       continue;
     }
+    name.title = project;
     name.append(
       el("span", "visually-hidden", ", "),
       el("span", "count", String(group.length)),
@@ -208,6 +198,7 @@ function render(snapshot: Snapshot): void {
       name,
       el("span", "detail", waiting.length > 0 ? needYou(waiting.length) : ""),
       el("span", "time"),
+      el("span", "go"),
     );
     const children = el("ul", "");
     for (const session of group)
@@ -217,7 +208,17 @@ function render(snapshot: Snapshot): void {
     block.append(head, children);
     rows.push(block);
   }
+  const before = sessionRows();
+  const active = activeRow();
+  const stop = active ?? before.find((row) => row.tabIndex === 0);
+  const id = stop?.dataset.session;
   entries!.replaceChildren(...rows);
+  const all = sessionRows();
+  const kept = all.find((row) => row.dataset.session === id);
+  const neighbour = stop
+    ? all[Math.min(before.indexOf(stop), all.length - 1)]
+    : undefined;
+  rove(kept ?? neighbour ?? all[0], active ? "keep" : "none");
 }
 
 const tick = setInterval(() => {
@@ -225,8 +226,57 @@ const tick = setInterval(() => {
 }, 1000);
 const unsubscribe = window.watchling.onSnapshot(render);
 void window.watchling.getSnapshot().then(render);
+entries.addEventListener("click", (event) => {
+  const row = (event.target as Element).closest<HTMLElement>(
+    "li[data-session]",
+  );
+  if (!row) return;
+  rove(row);
+  if (row.classList.contains("focusable"))
+    window.watchling.focusSession(row.dataset.session!);
+});
+entries.addEventListener("contextmenu", (event) => {
+  const row = (event.target as Element).closest<HTMLElement>(
+    "li[data-session]",
+  );
+  if (!row) return;
+  event.preventDefault();
+  rove(row);
+  window.watchling.showSessionMenu(row.dataset.session!);
+});
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") window.watchling.closeSessionList();
+  if (event.key === "Escape") {
+    window.watchling.closeSessionList();
+    return;
+  }
+  const rows = sessionRows();
+  const row = activeRow();
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    const stop = rows.find((item) => item.tabIndex === 0);
+    rove(
+      row
+        ? rows[Math.min(rows.length - 1, Math.max(0, rows.indexOf(row) + step))]
+        : stop,
+    );
+    return;
+  }
+  if (!row) return;
+  const id = row.dataset.session!;
+  if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    if (row.classList.contains("focusable")) window.watchling.focusSession(id);
+  } else if (event.metaKey && event.key.toLowerCase() === "c") {
+    event.preventDefault();
+    window.watchling.copySessionId(id);
+  } else if (
+    event.key === "ContextMenu" ||
+    (event.shiftKey && event.key === "F10")
+  ) {
+    event.preventDefault();
+    window.watchling.showSessionMenu(id);
+  }
 });
 window.addEventListener(
   "pagehide",

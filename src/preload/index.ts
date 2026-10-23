@@ -37,6 +37,9 @@ const bridge: PetBridge = Object.freeze({
     if (typeof id === "string")
       ipcRenderer.send("watchling:copy-session-id", id);
   },
+  showSessionMenu: (id: string) => {
+    if (typeof id === "string") ipcRenderer.send("watchling:session-menu", id);
+  },
   focusSession: (id: string) => {
     if (typeof id === "string") ipcRenderer.send("watchling:focus-session", id);
   },

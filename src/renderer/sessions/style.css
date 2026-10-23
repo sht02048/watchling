@@ -50,9 +50,10 @@ ul {
 }
 .row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto 44px;
+  grid-template-columns: 8px minmax(0, 1fr) auto 44px 12px;
   align-items: center;
   gap: 8px;
+  position: relative;
   height: 34px;
   padding: 0 14px;
 }
@@ -62,19 +63,14 @@ ul {
 .row.asking {
   background: rgba(118, 76, 220, 0.07);
 }
+.row.asking .detail {
+  color: #5a2fb8;
+  font-weight: 600;
+}
 .row.focusable {
-  position: relative;
   cursor: pointer;
 }
-.open {
-  position: absolute;
-  inset: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.open:focus-visible {
+li.row:focus-visible {
   outline: 2px solid rgba(35, 38, 47, 0.55);
   outline-offset: -2px;
 }
@@ -85,10 +81,6 @@ ul {
   .row.focusable.asking:hover {
     background: rgba(118, 76, 220, 0.11);
   }
-}
-.row.asking .detail {
-  color: #5a2fb8;
-  font-weight: 600;
 }
 .dot {
   pointer-events: none;
@@ -137,83 +129,19 @@ ul {
 .child .time {
   font-size: 11.5px;
 }
-.name {
+.go {
   display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
+  justify-content: flex-end;
+  color: var(--muted);
 }
-.name > .project,
-.name > .id {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-.copy {
-  flex: none;
-  position: relative;
-  z-index: 1;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--ink);
-  opacity: 0;
-  cursor: pointer;
-  transition-property: opacity, color, background-color, transform;
-  transition-duration: 150ms;
-  transition-timing-function: ease-out;
-}
-.copy::before {
-  content: "";
-  position: absolute;
-  inset: -3px -9px;
-}
-.copy svg {
-  position: absolute;
-  inset: 4px;
-  width: 14px;
-  height: 14px;
+.go svg {
+  width: 12px;
+  height: 12px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  pointer-events: none;
-}
-.copy .icon-done,
-.copy.copied .icon-copy {
-  display: none;
-}
-.copy.copied .icon-done {
-  display: block;
-  stroke-width: 1.75;
-}
-.copy.copied {
-  color: #23744a;
-}
-.row:hover .copy,
-.row:focus-within .copy,
-.copy.copied {
-  opacity: 1;
-}
-@media (hover: hover) and (pointer: fine) {
-  .copy:hover {
-    background: rgba(35, 38, 47, 0.09);
-  }
-}
-.copy:active {
-  transform: scale(0.96);
-}
-.copy:focus-visible {
-  outline: 2px solid rgba(35, 38, 47, 0.55);
-  outline-offset: 1px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .copy {
-    transition: none;
-  }
 }
 .hint {
   margin: 0;

@@ -28,6 +28,7 @@ export function attachIpc(options: {
   closeList: () => void;
   copy: (text: string) => void;
   focus: (id: string) => void;
+  menu: (id: string) => void;
 }): () => void {
   const listeners: [
     string,
@@ -101,6 +102,15 @@ export function attachIpc(options: {
       options.snapshot().sessions.some((session) => session.id === id)
     )
       options.copy(id);
+  });
+  listen("watchling:session-menu", "sessions", (...args) => {
+    const id = args[0];
+    if (
+      args.length === 1 &&
+      typeof id === "string" &&
+      options.snapshot().sessions.some((session) => session.id === id)
+    )
+      options.menu(id);
   });
   listen("watchling:focus-session", "sessions", (...args) => {
     const id = args[0];

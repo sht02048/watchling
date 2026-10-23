@@ -272,6 +272,15 @@ async function toggleConnection(value: boolean): Promise<void> {
   await refreshConnection();
 }
 
+function focusSession(id: string): void {
+  const terminal = observations.terminal(id);
+  if (!terminal || focusing) return;
+  hideList();
+  focusing = focusTerminal(terminal).finally(() => {
+    focusing = null;
+  });
+}
+
 function hideList(): void {
   if (!list?.isVisible()) return;
   list.hide();
@@ -434,13 +443,24 @@ async function start(options: DesktopOptions): Promise<void> {
     openList: showList,
     closeList: () => list?.hide(),
     copy: (text) => clipboard.writeText(text),
-    focus: (id) => {
-      const terminal = observations.terminal(id);
-      if (!terminal || focusing) return;
-      hideList();
-      focusing = focusTerminal(terminal).finally(() => {
-        focusing = null;
-      });
+    focus: focusSession,
+    menu: (id) => {
+      const session = snapshot.sessions.find((item) => item.id === id);
+      if (!session || !list) return;
+      Menu.buildFromTemplate([
+        ...(session.focusable
+          ? [
+              {
+                label: session.terminalName
+                  ? `Show in ${session.terminalName}`
+                  : "Show Terminal",
+                click: () => focusSession(id),
+              },
+              { type: "separator" as const },
+            ]
+          : []),
+        { label: "Copy Session ID", click: () => clipboard.writeText(id) },
+      ]).popup({ window: list });
     },
   });
   pet.webContents.on("render-process-gone", () => {

@@ -28,6 +28,7 @@ export interface SessionSummary {
   since: number;
   detail: SessionDetail | null;
   focusable?: true;
+  terminalName?: string;
 }
 
 export interface Snapshot {
@@ -66,6 +67,7 @@ export interface PetBridge {
   closeSessionList(): void;
   copySessionId(id: string): void;
   focusSession(id: string): void;
+  showSessionMenu(id: string): void;
 }
 
 declare global {

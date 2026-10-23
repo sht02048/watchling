@@ -19,6 +19,26 @@ interface Ask {
   order: number;
 }
 
+const terminalNames: Record<string, string> = {
+  "com.stablyai.orca": "Orca",
+  "com.apple.Terminal": "Terminal",
+  "com.googlecode.iterm2": "iTerm",
+  "com.mitchellh.ghostty": "Ghostty",
+  "com.github.wez.wezterm": "WezTerm",
+  "net.kovidgoyal.kitty": "kitty",
+  "dev.warp.Warp-Stable": "Warp",
+  "com.microsoft.VSCode": "VS Code",
+  "com.microsoft.VSCodeInsiders": "VS Code Insiders",
+  "com.todesktop.230313mzl4w4u92": "Cursor",
+  "com.exafunction.windsurf": "Windsurf",
+  "dev.zed.Zed": "Zed",
+};
+
+function terminalName(terminal: TerminalLocation): string | undefined {
+  if (terminal.app) return terminalNames[terminal.app];
+  return terminal.orcaTerminal ? "Orca" : undefined;
+}
+
 export interface TerminalLocation {
   app?: string;
   orcaTerminal?: string;
@@ -384,6 +404,9 @@ export class Observations {
       companions: Math.min(MAX_COMPANIONS, companions),
       sessions: ids.map((id, index) => {
         const session = this.sessions.get(id)!;
+        const name = session.terminal
+          ? terminalName(session.terminal)
+          : undefined;
         return {
           id,
           shortId: short.get(id)!,
@@ -392,6 +415,7 @@ export class Observations {
           since: session.since,
           detail: detail(session, states[index]!),
           ...(session.terminal ? { focusable: true as const } : {}),
+          ...(name ? { terminalName: name } : {}),
         };
       }),
     };
