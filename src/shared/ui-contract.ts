@@ -65,6 +65,7 @@ export interface PetBridge {
   beginDrag(cursor: Point): void;
   endDrag(): void;
   openSessionList(): void;
+  showPetMenu(): void;
   closeSessionList(): void;
   copySessionId(id: string): void;
   focusSession(id: string): void;

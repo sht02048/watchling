@@ -25,6 +25,7 @@ export function attachIpc(options: {
   beginDrag: (cursor: Point) => void;
   endDrag: () => void;
   openList: () => void;
+  petMenu: () => void;
   closeList: () => void;
   copy: (text: string) => void;
   focus: (id: string) => void;
@@ -86,6 +87,7 @@ export function attachIpc(options: {
   for (const [channel, handler] of [
     ["watchling:drag-end", options.endDrag],
     ["watchling:list-open", options.openList],
+    ["watchling:pet-menu", options.petMenu],
   ] as const) {
     listen(channel, "pet", (...args) => {
       if (args.length === 0) handler();

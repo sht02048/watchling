@@ -226,6 +226,10 @@ function endDrag(): void {
 
 function updateMenu(): void {
   if (!tray || tray.isDestroyed()) return;
+  tray.setContextMenu(appMenu());
+}
+
+function appMenu(): Menu {
   const item: MenuItemConstructorOptions = connection?.available
     ? {
         label: "Connected to Claude Code",
@@ -237,69 +241,66 @@ function updateMenu(): void {
         label: "Move Watchling to Applications to connect Claude Code",
         enabled: false,
       };
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: "Show pet", click: showPet },
-      { label: "Hide pet", click: hidePet },
-      { label: "Reset Position", click: resetPosition },
-      { type: "separator" },
-      {
-        label: "Settings",
-        submenu: [
-          ...(connection?.available
-            ? [
-                {
-                  label: "Launch at Login",
-                  type: "checkbox" as const,
-                  checked: app.getLoginItemSettings().openAtLogin,
-                  click: (menuItem: Electron.MenuItem) =>
-                    void setLaunchAtLogin(menuItem.checked),
-                },
-              ]
-            : []),
-          {
-            label: "Show on All Spaces",
-            type: "checkbox",
-            checked: settings?.allSpaces ?? true,
-            click: (menuItem) =>
-              changeSettings({ allSpaces: menuItem.checked }),
-          },
-          { type: "separator" },
-          { label: "Pet Size", enabled: false },
-          ...(Object.keys(petSizes) as PetSize[]).map(
-            (key): MenuItemConstructorOptions => ({
-              label: petSizes[key].label,
-              type: "radio",
-              checked: settings?.petSize === key,
-              click: () => resizePet(key),
-            }),
-          ),
-          { type: "separator" },
-          {
-            label: "Hide When No Sessions",
-            type: "checkbox",
-            checked: settings?.hideWhenEmpty ?? true,
-            click: (menuItem) =>
-              changeSettings({ hideWhenEmpty: menuItem.checked }),
-          },
-          {
-            label: "Dim When Idle",
-            type: "checkbox",
-            checked: settings?.dimWhenIdle ?? true,
-            click: (menuItem) =>
-              changeSettings({ dimWhenIdle: menuItem.checked }),
-          },
-        ],
-      },
-      { type: "separator" },
-      item,
-      { type: "separator" },
-      ...(connection?.available
-        ? [{ label: "Uninstall Watchling…", click: () => void uninstall() }]
-        : []),
-      { label: "Quit", click: () => app.quit() },
-    ]),
-  );
+  return Menu.buildFromTemplate([
+    { label: "Show pet", click: showPet },
+    { label: "Hide pet", click: hidePet },
+    { label: "Reset Position", click: resetPosition },
+    { type: "separator" },
+    {
+      label: "Settings",
+      submenu: [
+        ...(connection?.available
+          ? [
+              {
+                label: "Launch at Login",
+                type: "checkbox" as const,
+                checked: app.getLoginItemSettings().openAtLogin,
+                click: (menuItem: Electron.MenuItem) =>
+                  void setLaunchAtLogin(menuItem.checked),
+              },
+            ]
+          : []),
+        {
+          label: "Show on All Spaces",
+          type: "checkbox",
+          checked: settings?.allSpaces ?? true,
+          click: (menuItem) => changeSettings({ allSpaces: menuItem.checked }),
+        },
+        { type: "separator" },
+        { label: "Pet Size", enabled: false },
+        ...(Object.keys(petSizes) as PetSize[]).map(
+          (key): MenuItemConstructorOptions => ({
+            label: petSizes[key].label,
+            type: "radio",
+            checked: settings?.petSize === key,
+            click: () => resizePet(key),
+          }),
+        ),
+        { type: "separator" },
+        {
+          label: "Hide When No Sessions",
+          type: "checkbox",
+          checked: settings?.hideWhenEmpty ?? true,
+          click: (menuItem) =>
+            changeSettings({ hideWhenEmpty: menuItem.checked }),
+        },
+        {
+          label: "Dim When Idle",
+          type: "checkbox",
+          checked: settings?.dimWhenIdle ?? true,
+          click: (menuItem) =>
+            changeSettings({ dimWhenIdle: menuItem.checked }),
+        },
+      ],
+    },
+    { type: "separator" },
+    item,
+    { type: "separator" },
+    ...(connection?.available
+      ? [{ label: "Uninstall Watchling…", click: () => void uninstall() }]
+      : []),
+    { label: "Quit", click: () => app.quit() },
+  ]);
 }
 
 async function setLaunchAtLogin(value: boolean): Promise<void> {
@@ -674,6 +675,11 @@ async function start(options: DesktopOptions): Promise<void> {
     },
     endDrag,
     openList: showList,
+    petMenu: () => {
+      if (!pet || dragging) return;
+      list?.hide();
+      appMenu().popup({ window: pet });
+    },
     closeList: () => list?.hide(),
     copy: (text) => clipboard.writeText(text),
     focus: focusSession,

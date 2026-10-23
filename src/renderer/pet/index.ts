@@ -35,7 +35,12 @@ const unsubscribeOpacity = window.watchling.onOpacity((opacity) => {
 });
 void window.watchling.getSnapshot().then(render);
 canvas.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0 || !pet.hitTest(event.offsetX, event.offsetY)) return;
+  if (
+    event.button !== 0 ||
+    event.ctrlKey ||
+    !pet.hitTest(event.offsetX, event.offsetY)
+  )
+    return;
   hit = true;
   window.watchling.setPetHit(true);
   pointer = {
@@ -68,6 +73,10 @@ function finish(event: PointerEvent, cancelled: boolean): void {
     canvas!.releasePointerCapture(event.pointerId);
   if (click) window.watchling.openSessionList();
 }
+canvas.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  if (pet.hitTest(event.offsetX, event.offsetY)) window.watchling.showPetMenu();
+});
 canvas.addEventListener("pointerup", (event) => finish(event, false));
 canvas.addEventListener("pointercancel", (event) => finish(event, true));
 canvas.addEventListener("lostpointercapture", (event) => finish(event, true));

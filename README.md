@@ -75,7 +75,7 @@ Watchling only changes which window is in front. It never types into a terminal.
 
 ### Menu bar
 
-Watchling has no Dock icon. Use the menu bar icon to show or hide Peep, bring it back to the bottom-right corner with **Reset Position**, turn the Claude Code connection on or off, and quit. Drag Peep anywhere on screen; it remembers where you left it.
+Watchling has no Dock icon. Use the menu bar icon to show or hide Peep, bring it back to the bottom-right corner with **Reset Position**, turn the Claude Code connection on or off, and quit. Right-click Peep for the same menu. Drag Peep anywhere on screen; it remembers where you left it.
 
 **Settings** in the same menu holds:
 
