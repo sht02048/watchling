@@ -1111,3 +1111,74 @@ test("a session's terminal comes from its latest located event", () => {
   feed(observations, event("SessionEnd"));
   assert.equal(observations.terminal("session-1"), null);
 });
+test("a background agent launched before a restart reappears with its next event", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("PreToolUse", {
+      agentId: "agent-1",
+      toolName: "Read",
+      toolUseId: "t1",
+    }),
+  );
+  assert.equal(observations.snapshot().state, "background");
+  assert.equal(observations.snapshot().companions, 1);
+  feed(
+    observations,
+    event("PostToolUse", {
+      agentId: "agent-1",
+      toolName: "Read",
+      toolUseId: "t1",
+    }),
+  );
+  assert.equal(observations.snapshot().companions, 1);
+  feed(observations, event("SubagentStop", { agentId: "agent-1" }));
+  assert.equal(observations.snapshot().state, "idle");
+  assert.equal(observations.snapshot().companions, 0);
+});
+
+test("subagents working inside a turn are not mistaken for background agents", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PreToolUse", {
+      agentId: "agent-1",
+      toolName: "Read",
+      toolUseId: "t1",
+    }),
+    event("SubagentStop", { agentId: "agent-1" }),
+    event("Stop"),
+  );
+  assert.equal(observations.snapshot().state, "idle");
+  assert.equal(observations.snapshot().companions, 0);
+  feed(observations, event("SubagentStop", { agentId: "agent-2" }));
+  assert.equal(observations.snapshot().companions, 0);
+});
+
+test("a known background agent is not counted twice", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: "t1",
+      childAgentId: "agent-1",
+      childStatus: "async_launched",
+    }),
+    event("Stop"),
+    event("PreToolUse", {
+      agentId: "agent-1",
+      toolName: "Read",
+      toolUseId: "t2",
+    }),
+    event("SubagentStart", { agentId: "flow-1", subagentKind: "workflow" }),
+    event("PreToolUse", {
+      agentId: "flow-1",
+      toolName: "Read",
+      toolUseId: "t3",
+    }),
+  );
+  assert.equal(observations.snapshot().companions, 2);
+});

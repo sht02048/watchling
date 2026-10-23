@@ -223,6 +223,19 @@ export class Observations {
         ...(event.orcaTerminal ? { orcaTerminal: event.orcaTerminal } : {}),
       };
     if (event.backgroundTasks?.length === 0) session.background.clear();
+    // Only background agents act while the main turn is idle. This recovers one
+    // whose launch was missed, for example because Watchling restarted.
+    if (
+      event.agentId &&
+      event.eventName !== "SubagentStart" &&
+      event.eventName !== "SubagentStop" &&
+      session.base === "idle" &&
+      !session.background.has(event.agentId) &&
+      !session.workflow.has(event.agentId)
+    ) {
+      if (session.background.size >= MAX_BACKGROUND) session.unknown = true;
+      else session.background.add(event.agentId);
+    }
     const activity = (): void => {
       if (!(event.agentId && session.base === "idle")) session.base = "working";
     };
