@@ -86,8 +86,8 @@ const SLEEP: Pose = {
   rot: 0.02,
   droop: 0.35,
 };
-// Matches how long the app waits before dimming an idle Peep.
-const SLEEP_DELAY = 5;
+// The app dims an idle Peep 30 seconds after it falls asleep.
+const SLEEP_DELAY = 180;
 const POSES: Record<SemanticState, Pose> = {
   idle: IDLE,
   background: {

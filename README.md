@@ -82,8 +82,8 @@ Watchling has no Dock icon. Use the menu bar icon to show or hide Peep, bring it
 - **Launch at Login**
 - **Show on All Spaces** — on by default, including full-screen apps
 - **Pet Size** — Small, Medium, Large or Extra Large
-- **Hide When No Sessions** — on by default. Peep steps away a few seconds after the last session ends and returns when one starts.
-- **Dim When Idle** — on by default. Peep fades while every session is idle and brightens when one starts working or needs you, or when you hover it.
+- **Hide When No Sessions** — on by default. Peep steps away three minutes after the last session ends and returns as soon as one starts.
+- **Dim When Idle** — on by default. Once every session has been idle for three minutes Peep dozes off, and 30 seconds later it fades. It brightens when a session starts working or needs you, or when you hover it.
 
 Peep stays fully visible while Watchling can't tell what a session is doing.
 

@@ -39,7 +39,8 @@ import {
 } from "./settings-store.ts";
 import {
   DIMMED_OPACITY,
-  IDLE_DELAY_MS,
+  DIM_DELAY_MS,
+  HIDE_DELAY_MS,
   presence,
   type Activity,
   type Presence,
@@ -468,7 +469,7 @@ function updateActivity(): void {
   pendingActivity = next;
   const settle = (): void => {
     if (list?.isVisible() || dragging || hit) {
-      idleTimer = setTimeout(settle, IDLE_DELAY_MS);
+      idleTimer = setTimeout(settle, 1000);
       return;
     }
     idleTimer = undefined;
@@ -476,7 +477,10 @@ function updateActivity(): void {
     pendingActivity = undefined;
     updatePresence();
   };
-  idleTimer = setTimeout(settle, IDLE_DELAY_MS);
+  idleTimer = setTimeout(
+    settle,
+    presenceFor(next) === "hidden" ? HIDE_DELAY_MS : DIM_DELAY_MS,
+  );
 }
 
 function changeSettings(change: Partial<Settings>): void {

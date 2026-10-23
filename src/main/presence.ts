@@ -2,8 +2,9 @@ export type Presence = "shown" | "dimmed" | "hidden";
 export type Activity = "active" | "idle" | "empty";
 
 export const DIMMED_OPACITY = 0.35;
-// Long enough to still see Peep turn coral when a turn finishes.
-export const IDLE_DELAY_MS = 5000;
+// Peep falls asleep after three minutes in the renderer, then fades.
+export const DIM_DELAY_MS = 210_000;
+export const HIDE_DELAY_MS = 180_000;
 
 export function presence(options: {
   hidden: boolean;
