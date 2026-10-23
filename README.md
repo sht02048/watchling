@@ -25,12 +25,13 @@ Start a long task, switch to something else, and look up when Peep turns purple.
 - **Background companions** — up to three small companions ride on Peep's head while background agents run
 - **Session list** — click Peep to see every session grouped by project, with what it's doing and for how long
 - **Jump to a session** — click a session to bring its terminal forward; in Orca it opens the exact tab
+- **Stays out of the way** — Peep dozes off when nothing is happening, dims, and steps away when no session is open; its size and behavior live in Settings
 - **Auto-connect** — hooks install on first launch and can be turned off from the menu bar
 - **Local and read-only** — nothing leaves your Mac, and Watchling never changes a session
 
 ## Install
 
-Download the latest `.dmg` from [Releases](https://github.com/sht02048/watchling/releases/latest), move Watchling to Applications and launch it. It connects to Claude Code on first launch and shows a one-time notification.
+Download the latest `.dmg` from [Releases](https://github.com/sht02048/watchling/releases/latest), move Watchling to Applications and launch it. On first launch it connects to Claude Code, shows a one-time notification, and sets itself to open when your Mac starts. You can turn that off under **Settings**.
 
 Requires macOS 13 or later on Apple silicon.
 
@@ -41,7 +42,9 @@ Requires macOS 13 or later on Apple silicon.
 
 ### Peep's states
 
-<!-- Image: Peep in each state -->
+<p align="center">
+  <img src="docs/assets/peep-states.png" width="720" alt="Peep in each state, left to right: purple with a speech bubble, grey, orange, blue with two companions on its head, coral, and coral asleep with closed eyes and drifting z's">
+</p>
 
 | Peep looks              | Meaning                                          |
 | ----------------------- | ------------------------------------------------ |
@@ -83,7 +86,7 @@ Watchling has no Dock icon. Use the menu bar icon to show or hide Peep, bring it
 - **Show on All Spaces** — on by default, including full-screen apps
 - **Pet Size** — Small, Medium, Large or Extra Large
 - **Hide When No Sessions** — on by default. Peep steps away three minutes after the last session ends and returns as soon as one starts.
-- **Dim When Idle** — on by default. Once every session has been idle for three minutes Peep dozes off, and 30 seconds later it fades. It brightens when a session starts working or needs you, or when you hover it.
+- **Dim When Idle** — on by default. Peep fades once every session has been idle for three and a half minutes, half a minute after it dozes off. It brightens when a session starts working or needs you, or when you hover it.
 
 Peep stays fully visible while Watchling can't tell what a session is doing.
 
@@ -102,7 +105,10 @@ The helper sends event metadata such as session and tool IDs, the event type, to
 ## FAQ
 
 **Peep doesn't react to my sessions.**
-Make sure Watchling runs from Applications and **Connected to Claude Code** is ticked in the menu bar menu. Sessions that ran while Watchling was closed appear when it starts, if their Claude Code process is still running. Sessions from before Watchling was installed appear after their next prompt or tool call.
+Make sure Watchling runs from Applications and **Connected to Claude Code** is ticked in the menu bar menu. Sessions that ran while Watchling was closed appear when it starts, if their Claude Code process is still running. Sessions from before Watchling was installed appear after their next prompt or tool call, and background agents started before Watchling restarted reappear with their next tool call.
+
+**Where did Peep go?**
+With **Hide When No Sessions** on, Peep steps away three minutes after your last session ends and comes back when a new one starts. To bring it back sooner, choose **Show pet** in the menu bar menu or open Watchling again. Turn the setting off under **Settings** to keep Peep on screen.
 
 **Will it slow down Claude Code?**
 No. Each hook has a one-second timeout and returns nothing.
@@ -115,7 +121,7 @@ It adds only its own hook handlers and keeps the rest of `~/.claude/settings.jso
 
 ## Uninstall
 
-Choose **Uninstall Watchling…** in the menu bar menu. Watchling removes its hooks from `~/.claude/settings.json`, moves itself to the Trash and quits. Optionally delete `~/Library/Application Support/watchling` afterwards.
+Choose **Uninstall Watchling…** in the menu bar menu. Watchling removes its hooks from `~/.claude/settings.json`, stops opening when your Mac starts, moves itself to the Trash and quits. Optionally delete `~/Library/Application Support/watchling` afterwards.
 
 If you trash the app first, Claude Code keeps working; the leftover hooks check for the helper and do nothing. Installing Watchling again picks them up, even if you deleted its data folder.
 
