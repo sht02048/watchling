@@ -118,7 +118,8 @@ final class FingerprintTests: XCTestCase {
             let event = EventProjection.project(data, fingerprintKey: key)
             XCTAssertNotNil(event)
             XCTAssertNil(event?.inputFingerprint)
-            XCTAssertLessThan(Date().timeIntervalSince(start), 0.1)
+            // Loose enough for shared CI runners; the integration tests check the real helper's deadline.
+            XCTAssertLessThan(Date().timeIntervalSince(start), 0.5)
         }
     }
 
