@@ -1,4 +1,5 @@
 import "@/styles/global.css";
+import { Analytics } from "@vercel/analytics/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Site } from "@/app/Site.tsx";
@@ -11,5 +12,6 @@ if (!config) throw new Error("site/src/config/config.json is invalid");
 createRoot(document.querySelector("#app")!).render(
   <StrictMode>
     <Site config={config} />
+    <Analytics />
   </StrictMode>,
 );
