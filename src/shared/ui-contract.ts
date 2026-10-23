@@ -60,6 +60,7 @@ export interface PetBridge {
   getSnapshot(): Promise<Snapshot>;
   onSnapshot(listener: (snapshot: Snapshot) => void): () => void;
   onCursor(listener: (point: Point) => void): () => void;
+  onOpacity(listener: (opacity: number) => void): () => void;
   setPetHit(hit: boolean): void;
   beginDrag(cursor: Point): void;
   endDrag(): void;

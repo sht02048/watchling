@@ -23,6 +23,11 @@ const bridge: PetBridge = Object.freeze({
     subscribe("watchling:snapshot-changed", listener),
   onCursor: (listener: (point: Point) => void) =>
     subscribe("watchling:cursor", listener),
+  onOpacity: (listener: (opacity: number) => void) =>
+    subscribe("watchling:opacity", (value: unknown) => {
+      if (typeof value === "number" && value >= 0 && value <= 1)
+        listener(value);
+    }),
   setPetHit: (hit: boolean) => {
     if (typeof hit === "boolean") ipcRenderer.send("watchling:pet-hit", hit);
   },

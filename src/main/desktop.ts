@@ -31,6 +31,19 @@ import { attachIpc } from "./ipc.ts";
 import { focusTerminal } from "./terminal-focus.ts";
 import { clampWindow, expand, listPosition } from "./geometry.ts";
 import { PositionStore } from "./position-store.ts";
+import {
+  petSizes,
+  SettingsStore,
+  type PetSize,
+  type Settings,
+} from "./settings-store.ts";
+import {
+  DIMMED_OPACITY,
+  IDLE_DELAY_MS,
+  presence,
+  type Activity,
+  type Presence,
+} from "./presence.ts";
 import type { ClaudeConnection } from "./connection.ts";
 import type { TransportReceipt } from "../integration/claude/protocol.ts";
 import {
@@ -62,10 +75,11 @@ const viewUrls = {
     SESSIONS_VITE_DEV_SERVER_URL ?? "watchling://app/sessions/index.html",
   ).href,
 };
-const size = { width: 180, height: 180 };
+const baseSize = 180;
+let size = { width: baseSize, height: baseSize };
 const listSize = { width: 320, height: 280 };
 // Transparent margin around the body that may sit past the display edge.
-const petInset = 30;
+let petInset = 30;
 const csp = contentSecurityPolicy("'none'");
 let pet: BrowserWindow | undefined;
 let list: BrowserWindow | undefined;
@@ -74,6 +88,14 @@ let timer: ReturnType<typeof setInterval> | undefined;
 let dragTimer: ReturnType<typeof setInterval> | undefined;
 let detachIpc: (() => void) | undefined;
 let store: PositionStore | undefined;
+let settingsStore: SettingsStore | undefined;
+let settings: Settings | undefined;
+let petHidden = false;
+let peeking = false;
+let petOpacity = 1;
+let activity: Activity = "active";
+let pendingActivity: Activity | undefined;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
 let connection:
   | Pick<
       ClaudeConnection,
@@ -152,7 +174,7 @@ function queueSnapshot(): void {
 
 function configureWindow(window: BrowserWindow): void {
   window.setAlwaysOnTop(true, "floating");
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  applySpaces(window);
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.on("close", (event) => {
@@ -198,6 +220,7 @@ function endDrag(): void {
   }
   dragging = undefined;
   updateInput();
+  updatePresence();
 }
 
 function updateMenu(): void {
@@ -217,6 +240,56 @@ function updateMenu(): void {
     Menu.buildFromTemplate([
       { label: "Show pet", click: showPet },
       { label: "Hide pet", click: hidePet },
+      { label: "Reset Position", click: resetPosition },
+      { type: "separator" },
+      {
+        label: "Settings",
+        submenu: [
+          ...(connection?.available
+            ? [
+                {
+                  label: "Launch at Login",
+                  type: "checkbox" as const,
+                  checked: app.getLoginItemSettings().openAtLogin,
+                  click: (menuItem: Electron.MenuItem) =>
+                    void setLaunchAtLogin(menuItem.checked),
+                },
+              ]
+            : []),
+          {
+            label: "Show on All Spaces",
+            type: "checkbox",
+            checked: settings?.allSpaces ?? true,
+            click: (menuItem) =>
+              changeSettings({ allSpaces: menuItem.checked }),
+          },
+          { type: "separator" },
+          { label: "Pet Size", enabled: false },
+          ...(Object.keys(petSizes) as PetSize[]).map(
+            (key): MenuItemConstructorOptions => ({
+              label: petSizes[key].label,
+              type: "radio",
+              checked: settings?.petSize === key,
+              click: () => resizePet(key),
+            }),
+          ),
+          { type: "separator" },
+          {
+            label: "Hide When No Sessions",
+            type: "checkbox",
+            checked: settings?.hideWhenEmpty ?? true,
+            click: (menuItem) =>
+              changeSettings({ hideWhenEmpty: menuItem.checked }),
+          },
+          {
+            label: "Dim When Idle",
+            type: "checkbox",
+            checked: settings?.dimWhenIdle ?? true,
+            click: (menuItem) =>
+              changeSettings({ dimWhenIdle: menuItem.checked }),
+          },
+        ],
+      },
       { type: "separator" },
       item,
       { type: "separator" },
@@ -226,6 +299,27 @@ function updateMenu(): void {
       { label: "Quit", click: () => app.quit() },
     ]),
   );
+}
+
+async function setLaunchAtLogin(value: boolean): Promise<void> {
+  app.setLoginItemSettings({ openAtLogin: value });
+  updateMenu();
+  if (!value || app.getLoginItemSettings().status !== "requires-approval")
+    return;
+  app.focus({ steal: true });
+  const { response } = await dialog.showMessageBox({
+    type: "info",
+    message: "Allow Watchling in Login Items",
+    detail:
+      "macOS needs your approval before Watchling can open at login. Turn Watchling on in System Settings > General > Login Items.",
+    buttons: ["Open System Settings", "Cancel"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response === 0)
+    await shell.openExternal(
+      "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
+    );
 }
 
 async function uninstall(): Promise<void> {
@@ -249,6 +343,7 @@ async function uninstall(): Promise<void> {
     });
     return;
   }
+  app.setLoginItemSettings({ openAtLogin: false });
   try {
     await shell.trashItem(dirname(dirname(dirname(process.execPath))));
   } catch {
@@ -302,18 +397,151 @@ function showList(): void {
 }
 
 function showPet(): void {
-  if (!pet) return;
+  petHidden = false;
+  peeking = currentActivity() !== "active";
+  // A window kept to one Space only reappears in the current one after hiding.
+  if (pet?.isVisible() && settings?.allSpaces === false) pet.hide();
+  updatePresence();
+}
+
+function hidePet(): void {
+  petHidden = true;
+  updatePresence();
+}
+
+function presenceFor(state: Activity): Presence {
+  if (!settings) return "shown";
+  return presence({
+    hidden: petHidden,
+    activity: state,
+    hideWhenEmpty: settings.hideWhenEmpty,
+    dimWhenIdle: settings.dimWhenIdle,
+    peeking,
+  });
+}
+
+function setPetOpacity(value: number): void {
+  if (!pet || pet.webContents.isDestroyed() || value === petOpacity) return;
+  petOpacity = value;
+  pet.webContents.send("watchling:opacity", value);
+}
+
+function updatePresence(): void {
+  if (!pet || pet.isDestroyed() || !settings) return;
+  const shown = presenceFor(activity);
+  if (shown === "hidden") {
+    if (!pet.isVisible()) return;
+    list?.hide();
+    pet.webContents.setBackgroundThrottling(true);
+    pet.hide();
+    endDrag();
+    return;
+  }
+  setPetOpacity(shown === "dimmed" && !hit && !dragging ? DIMMED_OPACITY : 1);
+  if (pet.isVisible()) return;
   hit = false;
   updateInput();
   pet.webContents.setBackgroundThrottling(false);
   pet.showInactive();
 }
 
-function hidePet(): void {
+function currentActivity(): Activity {
+  if (snapshot.state !== "idle") return "active";
+  return snapshot.sessions.length === 0 ? "empty" : "idle";
+}
+
+function updateActivity(): void {
+  const next = currentActivity();
+  if (next === pendingActivity) return;
+  clearTimeout(idleTimer);
+  idleTimer = undefined;
+  pendingActivity = undefined;
+  if (next === activity) return;
+  if (next === "active") peeking = false;
+  const visibility = { hidden: 0, dimmed: 1, shown: 2 };
+  // Peep comes back at once; it only fades or hides after things settle.
+  if (visibility[presenceFor(next)] >= visibility[presenceFor(activity)]) {
+    activity = next;
+    updatePresence();
+    return;
+  }
+  pendingActivity = next;
+  const settle = (): void => {
+    if (list?.isVisible() || dragging || hit) {
+      idleTimer = setTimeout(settle, IDLE_DELAY_MS);
+      return;
+    }
+    idleTimer = undefined;
+    activity = next;
+    pendingActivity = undefined;
+    updatePresence();
+  };
+  idleTimer = setTimeout(settle, IDLE_DELAY_MS);
+}
+
+function changeSettings(change: Partial<Settings>): void {
+  if (!settings) return;
+  settings = { ...settings, ...change };
+  void settingsStore?.save(settings);
+  if (change.allSpaces !== undefined)
+    for (const window of [pet, list]) if (window) applySpaces(window);
+  updatePresence();
+  updateMenu();
+}
+
+function applySpaces(window: BrowserWindow): void {
+  const all = settings?.allSpaces ?? true;
+  // Without skipping, turning this off makes Electron show a Dock icon.
+  window.setVisibleOnAllWorkspaces(all, {
+    visibleOnFullScreen: all,
+    skipTransformProcessType: true,
+  });
+}
+
+function defaultPosition(): Point {
+  const area = screen.getPrimaryDisplay().workArea;
+  return {
+    x: area.x + area.width - size.width - 96,
+    y: area.y + area.height - size.height - 24,
+  };
+}
+
+function resetPosition(): void {
+  if (!pet) return;
   endDrag();
   list?.hide();
-  pet?.webContents.setBackgroundThrottling(true);
-  pet?.hide();
+  const position = defaultPosition();
+  pet.setPosition(position.x, position.y);
+  void store?.save(position);
+  showPet();
+}
+
+function applyPetSize(petSize: PetSize): void {
+  const scale = petSizes[petSize].scale;
+  const side = Math.round(baseSize * scale);
+  size = { width: side, height: side };
+  petInset = Math.round(30 * scale);
+}
+
+function resizePet(petSize: PetSize): void {
+  if (!settings || settings.petSize === petSize) return;
+  const before = pet?.getBounds();
+  changeSettings({ petSize });
+  applyPetSize(petSize);
+  if (!pet || !before) return;
+  endDrag();
+  list?.hide();
+  // pet-figure centres Peep at 52% of the window with a radius of 30%, so its
+  // feet sit near 82% of the height at every size.
+  const feet = 0.82;
+  const anchored = {
+    x: Math.round(before.x + (before.width - size.width) / 2),
+    y: Math.round(before.y + (before.height - size.height) * feet),
+  };
+  const area = expand(screen.getDisplayMatching(before).bounds, petInset);
+  const position = clampWindow(anchored, area, size);
+  pet.setBounds({ ...position, ...size });
+  void store?.save(position);
 }
 
 function keepOnScreen(): void {
@@ -358,12 +586,12 @@ async function start(options: DesktopOptions): Promise<void> {
     }
   });
   store = new PositionStore(app.getPath("userData"));
+  settingsStore = new SettingsStore(app.getPath("userData"));
+  settings = await settingsStore.load();
+  applyPetSize(settings.petSize);
   const saved = await store.load();
   const area = screen.getPrimaryDisplay().workArea;
-  const initial = saved ?? {
-    x: area.x + area.width - size.width - 24,
-    y: area.y + area.height - size.height - 24,
-  };
+  const initial = saved ?? defaultPosition();
   const display = saved
     ? expand(screen.getDisplayNearestPoint(saved).bounds, petInset)
     : area;
@@ -417,6 +645,7 @@ async function start(options: DesktopOptions): Promise<void> {
     hit: (value) => {
       hit = value;
       updateInput();
+      updatePresence();
     },
     beginDrag: (cursor) => {
       // The list blurs on the same press, so it may already be hidden when this arrives.
@@ -485,6 +714,7 @@ async function start(options: DesktopOptions): Promise<void> {
       try {
         snapshot = observations.snapshot();
         updateTray();
+        updateActivity();
         return snapshot;
       } finally {
         finishTrace?.();
@@ -559,7 +789,10 @@ async function start(options: DesktopOptions): Promise<void> {
       finishTrace?.();
     }
   }, 50);
-  if (!quitting) showPet();
+  if (!quitting) {
+    updatePresence();
+    updateActivity();
+  }
   options.onStarted?.({
     collector,
     hide: hidePet,
@@ -597,8 +830,10 @@ export async function runDesktop(
           screen.removeListener("display-metrics-changed", keepOnScreen);
         }
         tray?.destroy();
+        clearTimeout(idleTimer);
         const results = await Promise.allSettled([
           store?.flush(),
+          settingsStore?.flush(),
           collector?.close(),
         ]);
         if (results.some((result) => result.status === "rejected"))
@@ -611,6 +846,7 @@ export async function runDesktop(
   if (!app.requestSingleInstanceLock()) app.quit();
   else {
     app.on("second-instance", () => showPet());
+    app.on("activate", () => showPet());
     startup = app
       .whenReady()
       .then(() => start(options))

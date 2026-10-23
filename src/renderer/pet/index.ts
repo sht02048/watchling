@@ -24,6 +24,15 @@ const unsubscribeCursor = window.watchling.onCursor((point) => {
     window.watchling.setPetHit(hit);
   }
 });
+const unsubscribeOpacity = window.watchling.onOpacity((opacity) => {
+  const style = document.body.style;
+  // Brighten quickly under the cursor; fade out slowly when Peep goes idle.
+  style.transition =
+    opacity > Number(style.opacity || 1)
+      ? "opacity 200ms cubic-bezier(0.23, 1, 0.32, 1)"
+      : "opacity 700ms ease-in-out";
+  style.opacity = String(opacity);
+});
 void window.watchling.getSnapshot().then(render);
 canvas.addEventListener("pointerdown", (event) => {
   if (event.button !== 0 || !pet.hitTest(event.offsetX, event.offsetY)) return;
@@ -68,6 +77,7 @@ window.addEventListener(
     window.watchling.endDrag();
     unsubscribeSnapshot();
     unsubscribeCursor();
+    unsubscribeOpacity();
     pet.destroy();
   },
   { once: true },
