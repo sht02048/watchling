@@ -16,6 +16,18 @@ public enum ProcessAncestry {
         case "0": return false
         default: break
         }
+        guard let pid = claudeProcess(
+            environment: environment, start: start, table: table, limit: limit, isActive: isActive
+        ), let arguments = table.arguments(of: pid), isActive() else { return nil }
+        return !arguments.dropFirst().contains {
+            $0 == "-p" || $0 == "--print" || $0.hasPrefix("--print=")
+        }
+    }
+
+    public static func claudeProcess(
+        environment: [String: String], start: Int32, table: ProcessTable,
+        limit: Int = 4, isActive: () -> Bool
+    ) -> Int32? {
         var claudePid: Int32?
         if let value = environment["CLAUDE_PID"] {
             guard let pid = Int32(value), pid > 1 else { return nil }
@@ -25,13 +37,7 @@ public enum ProcessAncestry {
         var visited: Set<Int32> = []
         for _ in 0..<limit {
             guard isActive(), pid > 1, visited.insert(pid).inserted else { return nil }
-            let isClaude = claudePid.map { $0 == pid } ?? recognizesClaude(pid, table: table)
-            if isClaude {
-                guard let arguments = table.arguments(of: pid), isActive() else { return nil }
-                return !arguments.dropFirst().contains {
-                    $0 == "-p" || $0 == "--print" || $0.hasPrefix("--print=")
-                }
-            }
+            if claudePid.map({ $0 == pid }) ?? recognizesClaude(pid, table: table) { return pid }
             guard let parent = table.parent(of: pid) else { return nil }
             pid = parent
         }
@@ -60,6 +66,13 @@ public struct DarwinProcessTable: ProcessTable {
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
         guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
         return Int32(bitPattern: info.pbi_ppid)
+    }
+
+    public func startTime(of pid: Int32) -> Int? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return Int(info.pbi_start_tvsec)
     }
 
     public func arguments(of pid: Int32) -> [String]? {

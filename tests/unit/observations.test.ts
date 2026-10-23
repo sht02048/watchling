@@ -1054,3 +1054,27 @@ test("short ids are at least four characters and unique only within a project", 
     ],
   );
 });
+
+test("a session lost while the app was closed is unknown until its next turn", () => {
+  const observations = new Observations();
+  observations.loseSession("session-1");
+  observations.loseSession("session-2");
+  feed(
+    observations,
+    event("PreToolUse", { toolName: "Bash", toolUseId: "toolu_1" }),
+    event("SessionStart", { sessionId: "session-2" }),
+    event("PreToolUse", {
+      sessionId: "session-3",
+      toolName: "Bash",
+      toolUseId: "toolu_3",
+    }),
+  );
+  assert.equal(stateOf(observations), "unknown");
+  assert.equal(stateOf(observations, "session-2"), "idle");
+  assert.equal(stateOf(observations, "session-3"), "working");
+  feed(observations, event("UserPromptSubmit"));
+  assert.equal(stateOf(observations), "working");
+  observations.loseSession("session-3");
+  assert.equal(stateOf(observations, "session-3"), "unknown");
+  assert.equal(observations.snapshot().state, "unknown");
+});

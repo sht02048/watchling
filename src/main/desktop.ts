@@ -502,6 +502,10 @@ async function start(options: DesktopOptions): Promise<void> {
         observations.loseIntegrity();
         queueSnapshot();
       },
+      onSessionLoss: (sessionId) => {
+        observations.loseSession(sessionId);
+        queueSnapshot();
+      },
     });
   } catch {
     observations.receiverFailed();

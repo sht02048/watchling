@@ -5,6 +5,8 @@ import HookProtocol
 
 private let maximumDescriptorBytes = 4096
 private let maximumFrameBytes = 8192
+private let maximumSpoolBytes = 262_144
+private let maximumSpoolSessions = 32
 
 private func monotonicNanoseconds() -> UInt64? {
     var time = timespec()
@@ -128,10 +130,12 @@ private func hasPrivateMetadata(
         && metadata.st_mode & mode_t(0o7777) == permissions
 }
 
-private func openPrivateDirectory(_ path: String, uid: uid_t, deadline: Deadline) -> Int32? {
+private func openPrivateDirectory(
+    _ path: String, in base: Int32 = AT_FDCWD, uid: uid_t, deadline: Deadline
+) -> Int32? {
     guard deadline.isActive else { return nil }
     let fd = path.withCString {
-        Darwin.open($0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        Darwin.openat(base, $0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
     }
     guard fd >= 0 else { return nil }
     var metadata = stat()
@@ -185,14 +189,23 @@ private struct Descriptor: Decodable {
     }
 }
 
-private func readDescriptor(_ path: AbsolutePath, uid: uid_t, deadline: Deadline) -> Descriptor? {
-    guard let directory = openPrivateDirectory(path.parent, uid: uid, deadline: deadline) else { return nil }
+private enum DescriptorState {
+    case absent
+    case invalid
+    case found(Descriptor)
+}
+
+private func readDescriptor(_ path: AbsolutePath, uid: uid_t, deadline: Deadline) -> DescriptorState {
+    guard let directory = openPrivateDirectory(path.parent, uid: uid, deadline: deadline) else { return .invalid }
     defer { Darwin.close(directory) }
-    guard deadline.isActive else { return nil }
+    guard deadline.isActive else { return .invalid }
+    var openError: Int32 = 0
     let fd = path.name.withCString {
-        Darwin.openat(directory, $0, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        let fd = Darwin.openat(directory, $0, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        openError = errno
+        return fd
     }
-    guard fd >= 0 else { return nil }
+    guard fd >= 0 else { return openError == ENOENT ? .absent : .invalid }
     defer { Darwin.close(fd) }
     var metadata = stat()
     guard deadline.isActive, Darwin.fstat(fd, &metadata) == 0,
@@ -202,8 +215,8 @@ private func readDescriptor(_ path: AbsolutePath, uid: uid_t, deadline: Deadline
         deadline.isActive,
         let descriptor = try? JSONDecoder().decode(Descriptor.self, from: bytes),
         deadline.isActive
-    else { return nil }
-    return descriptor
+    else { return .invalid }
+    return .found(descriptor)
 }
 
 private struct Frame: Encodable {
@@ -215,8 +228,9 @@ private struct Frame: Encodable {
     let event: ClaudeEvent
 }
 
-private func connectOnce(_ fd: Int32, address: inout sockaddr_un, deadline: Deadline) -> Bool {
-    guard deadline.isActive else { return false }
+// Returns 0 once connected, otherwise the errno that stopped the attempt.
+private func connectOnce(_ fd: Int32, address: inout sockaddr_un, deadline: Deadline) -> Int32 {
+    guard deadline.isActive else { return ETIMEDOUT }
     let result = withUnsafePointer(to: &address) { pointer in
         pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
             Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
@@ -224,16 +238,14 @@ private func connectOnce(_ fd: Int32, address: inout sockaddr_un, deadline: Dead
     }
     if result != 0 {
         let error = errno
-        guard error == EINPROGRESS || error == EINTR,
-            waitUntilReady(fd, events: Int16(POLLOUT), deadline: deadline)
-        else { return false }
+        guard error == EINPROGRESS || error == EINTR else { return error }
+        guard waitUntilReady(fd, events: Int16(POLLOUT), deadline: deadline) else { return ETIMEDOUT }
         var socketError: Int32 = 0
         var length = socklen_t(MemoryLayout<Int32>.size)
-        guard Darwin.getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &length) == 0,
-            socketError == 0
-        else { return false }
+        guard Darwin.getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &length) == 0 else { return errno }
+        guard socketError == 0 else { return socketError }
     }
-    return deadline.isActive
+    return deadline.isActive ? 0 : ETIMEDOUT
 }
 
 private func sendAll(_ bytes: Data, fd: Int32, deadline: Deadline) -> Bool {
@@ -256,7 +268,16 @@ private func sendAll(_ bytes: Data, fd: Int32, deadline: Deadline) -> Bool {
     }
 }
 
-private func emit(_ event: ClaudeEvent, descriptor: Descriptor, uid: uid_t, deadline: Deadline) {
+private enum Emission {
+    case sent
+    // Nothing listens at the endpoint, so the app is not running.
+    case offline
+    case failed
+}
+
+private func emit(
+    _ event: ClaudeEvent, descriptor: Descriptor, uid: uid_t, deadline: Deadline
+) -> Emission {
     #if WATCHLING_NATIVE_TRACE
     diagnosticTrace.record(.connectBegin)
     var connected = false
@@ -273,53 +294,175 @@ private func emit(_ event: ClaudeEvent, descriptor: Descriptor, uid: uid_t, dead
             Frame(epoch: descriptor.epoch, token: descriptor.token, event: event)
         ),
         frame.count < maximumFrameBytes, deadline.isActive
-    else { return }
+    else { return .failed }
     frame.append(0x0A)
 
     var address = sockaddr_un()
-    guard path.full.utf8.count < MemoryLayout.size(ofValue: address.sun_path) else { return }
+    guard path.full.utf8.count < MemoryLayout.size(ofValue: address.sun_path) else { return .failed }
     address.sun_family = sa_family_t(AF_UNIX)
     address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
     withUnsafeMutableBytes(of: &address.sun_path) { storage in
         storage.copyBytes(from: path.full.utf8)
     }
 
-    guard let directory = openPrivateDirectory(path.parent, uid: uid, deadline: deadline) else { return }
+    guard let directory = openPrivateDirectory(path.parent, uid: uid, deadline: deadline) else {
+        let missing = path.parent.withCString { Darwin.access($0, F_OK) != 0 && errno == ENOENT }
+        return missing ? .offline : .failed
+    }
     defer { Darwin.close(directory) }
     var metadata = stat()
+    var inspectError: Int32 = 0
     let inspected = path.name.withCString {
-        Darwin.fstatat(directory, $0, &metadata, AT_SYMLINK_NOFOLLOW)
+        let result = Darwin.fstatat(directory, $0, &metadata, AT_SYMLINK_NOFOLLOW)
+        inspectError = errno
+        return result
     }
-    guard inspected == 0,
-        hasPrivateMetadata(metadata, kind: mode_t(S_IFSOCK), permissions: 0o600, uid: uid),
+    guard inspected == 0 else { return inspectError == ENOENT ? .offline : .failed }
+    guard hasPrivateMetadata(metadata, kind: mode_t(S_IFSOCK), permissions: 0o600, uid: uid),
         deadline.isActive
-    else { return }
+    else { return .failed }
 
     let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
-    guard fd >= 0 else { return }
+    guard fd >= 0 else { return .failed }
     defer { Darwin.close(fd) }
     let flags = Darwin.fcntl(fd, F_GETFL)
     guard flags >= 0, Darwin.fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0,
         Darwin.fcntl(fd, F_SETFD, FD_CLOEXEC) == 0, deadline.isActive
-    else { return }
+    else { return .failed }
     var noSigpipe: Int32 = 1
-    guard Darwin.setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size)) == 0,
-        connectOnce(fd, address: &address, deadline: deadline)
-    else { return }
+    guard Darwin.setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, socklen_t(MemoryLayout<Int32>.size)) == 0
+    else { return .failed }
+    let connectError = connectOnce(fd, address: &address, deadline: deadline)
+    guard connectError == 0 else {
+        // A running app can refuse connections when its backlog is full, so only a missing socket counts.
+        return connectError == ENOENT ? .offline : .failed
+    }
 
     var peerUid: uid_t = 0
     var peerGid: gid_t = 0
-    guard Darwin.getpeereid(fd, &peerUid, &peerGid) == 0, peerUid == uid, deadline.isActive else { return }
+    guard Darwin.getpeereid(fd, &peerUid, &peerGid) == 0, peerUid == uid, deadline.isActive else { return .failed }
     #if WATCHLING_NATIVE_TRACE
     connected = true
     diagnosticTrace.record(.connectEnd)
     diagnosticTrace.record(.sendBegin)
+    #endif
     let sent = sendAll(frame, fd: fd, deadline: deadline)
+    #if WATCHLING_NATIVE_TRACE
     diagnosticTrace.record(.sendEnd)
     if !sent { diagnosticTrace.reject(.sendBegin) }
-    #else
-    _ = sendAll(frame, fd: fd, deadline: deadline)
     #endif
+    return sent ? .sent : .failed
+}
+
+private func markInteractivity(_ event: inout ClaudeEvent, deadline: Deadline) {
+    guard event.eventName == "PermissionRequest" || event.eventName == "Notification" else { return }
+    event.interactive = ProcessAncestry.interactivity(
+        environment: ProcessInfo.processInfo.environment, start: Darwin.getppid(),
+        table: DarwinProcessTable(), isActive: { deadline.isActive }
+    )
+}
+
+private struct SpoolRecord: Encodable {
+    let pid: Int32
+    let startedAt: Int
+    let event: ClaudeEvent
+}
+
+private func openPendingDirectory(_ descriptorPath: AbsolutePath, uid: uid_t, deadline: Deadline) -> Int32? {
+    guard let parent = openPrivateDirectory(descriptorPath.parent, uid: uid, deadline: deadline) else { return nil }
+    defer { Darwin.close(parent) }
+    // The app may claim the directory between creating and opening it, so try once more.
+    for _ in 0..<2 {
+        let created = "pending".withCString { Darwin.mkdirat(parent, $0, 0o700) == 0 || errno == EEXIST }
+        guard created else { return nil }
+        if let pending = openPrivateDirectory("pending", in: parent, uid: uid, deadline: deadline) {
+            return pending
+        }
+    }
+    return nil
+}
+
+private func spooledSessions(in directory: Int32, deadline: Deadline) -> Int? {
+    let fd = ".".withCString { Darwin.openat(directory, $0, O_RDONLY | O_DIRECTORY | O_CLOEXEC) }
+    guard fd >= 0 else { return nil }
+    guard let stream = Darwin.fdopendir(fd) else {
+        Darwin.close(fd)
+        return nil
+    }
+    defer { Darwin.closedir(stream) }
+    var count = 0
+    while deadline.isActive, let entry = Darwin.readdir(stream) {
+        let name = withUnsafeBytes(of: entry.pointee.d_name) {
+            String(decoding: $0.prefix(Int(entry.pointee.d_namlen)), as: UTF8.self)
+        }
+        if name.hasSuffix(".jsonl") { count += 1 }
+    }
+    return deadline.isActive ? count : nil
+}
+
+private func spool(_ record: SpoolRecord, in directory: Int32, uid: uid_t, deadline: Deadline) {
+    let name = record.event.sessionId + ".jsonl"
+    if record.event.eventName == "SessionEnd" && record.event.agentId == nil {
+        _ = name.withCString { Darwin.unlinkat(directory, $0, 0) }
+        return
+    }
+    guard var line = try? JSONEncoder().encode(record), line.count < maximumFrameBytes, deadline.isActive
+    else { return }
+    line.append(0x0A)
+    let open = { (flags: Int32) -> (Int32, Int32) in
+        name.withCString {
+            let fd = Darwin.openat(directory, $0, O_WRONLY | O_APPEND | O_NOFOLLOW | O_CLOEXEC | flags, 0o600)
+            return (fd, errno)
+        }
+    }
+    var (fd, openError) = open(0)
+    if fd < 0 && openError == ENOENT,
+        let count = spooledSessions(in: directory, deadline: deadline), count < maximumSpoolSessions
+    {
+        (fd, _) = open(O_CREAT)
+    }
+    guard fd >= 0 else { return }
+    defer { Darwin.close(fd) }
+    var metadata = stat()
+    guard Darwin.fstat(fd, &metadata) == 0,
+        hasPrivateMetadata(metadata, kind: mode_t(S_IFREG), permissions: 0o600, uid: uid),
+        deadline.isActive
+    else { return }
+    if Int(metadata.st_size) + line.count > maximumSpoolBytes {
+        // The app shows a session whose record restarted as unknown until its next prompt.
+        guard Darwin.ftruncate(fd, 0) == 0 else { return }
+        line = Data("{\"lost\":true}\n".utf8) + line
+    }
+    _ = line.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+}
+
+// Keeps the event for the app's next launch. The app publishes its endpoint before it
+// claims the pending directory, so the endpoint is checked again after opening it.
+private func spoolOffline(_ bytes: Data, descriptorPath: AbsolutePath, uid: uid_t, deadline: Deadline) {
+    guard var event = EventProjection.project(bytes), isUUID(event.sessionId, lowercaseOnly: true),
+        deadline.isActive,
+        let pending = openPendingDirectory(descriptorPath, uid: uid, deadline: deadline)
+    else { return }
+    defer { Darwin.close(pending) }
+    switch readDescriptor(descriptorPath, uid: uid, deadline: deadline) {
+    case .invalid:
+        return
+    case .found(let descriptor):
+        guard var live = EventProjection.project(
+            bytes, fingerprintKey: InputFingerprint.key(token: descriptor.token)
+        ), deadline.isActive else { return }
+        markInteractivity(&live, deadline: deadline)
+        guard emit(live, descriptor: descriptor, uid: uid, deadline: deadline) == .offline else { return }
+    case .absent:
+        break
+    }
+    markInteractivity(&event, deadline: deadline)
+    let table = DarwinProcessTable()
+    guard let pid = ProcessAncestry.claudeProcess(
+        environment: ProcessInfo.processInfo.environment, start: Darwin.getppid(),
+        table: table, isActive: { deadline.isActive }
+    ), let startedAt = table.startTime(of: pid), deadline.isActive else { return }
+    spool(SpoolRecord(pid: pid, startedAt: startedAt, event: event), in: pending, uid: uid, deadline: deadline)
 }
 
 private func run(deadline: Deadline) {
@@ -357,11 +500,13 @@ private func run(deadline: Deadline) {
     diagnosticTrace.record(.stdinEnd)
     diagnosticTrace.record(.descriptorBegin)
     #endif
-    guard let descriptor = readDescriptor(descriptorPath, uid: uid, deadline: deadline) else {
+    let state = readDescriptor(descriptorPath, uid: uid, deadline: deadline)
+    guard case .found(let descriptor) = state else {
         #if WATCHLING_NATIVE_TRACE
         diagnosticTrace.record(.descriptorEnd)
         diagnosticTrace.reject(.descriptorBegin)
         #endif
+        if case .absent = state { spoolOffline(bytes, descriptorPath: descriptorPath, uid: uid, deadline: deadline) }
         return
     }
     #if WATCHLING_NATIVE_TRACE
@@ -380,13 +525,10 @@ private func run(deadline: Deadline) {
     #if WATCHLING_NATIVE_TRACE
     diagnosticTrace.record(.projectionEnd)
     #endif
-    if event.eventName == "PermissionRequest" || event.eventName == "Notification" {
-        event.interactive = ProcessAncestry.interactivity(
-            environment: ProcessInfo.processInfo.environment, start: Darwin.getppid(),
-            table: DarwinProcessTable(), isActive: { deadline.isActive }
-        )
+    markInteractivity(&event, deadline: deadline)
+    if emit(event, descriptor: descriptor, uid: uid, deadline: deadline) == .offline {
+        spoolOffline(bytes, descriptorPath: descriptorPath, uid: uid, deadline: deadline)
     }
-    emit(event, descriptor: descriptor, uid: uid, deadline: deadline)
 }
 
 let watchdogDeadline = DispatchTime.now() + .milliseconds(150)

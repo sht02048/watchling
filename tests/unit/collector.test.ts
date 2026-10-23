@@ -2,7 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
-import { chmod, lstat, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -681,6 +691,96 @@ test("private directory and descriptor symlink checks never replace user files",
       true,
     );
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("events recorded while the app was closed replay before live frames", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "watchling-collector-test-"));
+  const pending = join(directory, "pending");
+  await mkdir(pending, { mode: 0o700 });
+  const alive = { pid: 4242, startedAt: 1_700_000_000 };
+  const record = (sessionId: string, eventName: string, owner = alive) =>
+    JSON.stringify({
+      ...owner,
+      event: { eventName, sessionId, project: "p" },
+    });
+  const [running, lost, gone, broken] = Array.from({ length: 4 }, randomUUID);
+  const files: [string, string, number?][] = [
+    [
+      running!,
+      [
+        record(running!, "SessionStart"),
+        record(running!, "UserPromptSubmit"),
+      ].join("\n") + "\n",
+    ],
+    [
+      lost!,
+      [
+        '{"lost":true}',
+        record(lost!, "UserPromptSubmit"),
+        "{broken",
+        record(randomUUID(), "Stop"),
+        record(lost!, "Stop"),
+      ].join("\n") + '\n{"pid":',
+    ],
+    [
+      gone!,
+      record(gone!, "UserPromptSubmit", { pid: 4343, startedAt: 1 }) + "\n",
+    ],
+    [broken!, record(broken!, "UserPromptSubmit") + "\n", 0o644],
+  ];
+  for (const [sessionId, body, mode] of files)
+    await writeFile(join(pending, `${sessionId}.jsonl`), body, {
+      mode: mode ?? 0o600,
+    });
+  await writeFile(join(pending, "notes.txt"), record(running!, "Stop") + "\n", {
+    mode: 0o600,
+  });
+  await mkdir(join(directory, "replay-stale"), { mode: 0o700 });
+  const received: string[] = [];
+  const checked: unknown[] = [];
+  const collector = await startCollector({
+    directory,
+    onEvent: (value) => received.push(`${value.sessionId}:${value.eventName}`),
+    onLoss: () => assert.fail("Replay reported a transport loss"),
+    onSessionLoss: (sessionId) => received.push(`${sessionId}:lost`),
+    checkProcesses: async (processes) => {
+      checked.push(...processes);
+      return processes.filter((entry) => entry.pid === alive.pid);
+    },
+  });
+  try {
+    const live = await endpoint(collector.descriptorPath);
+    await send(
+      live.socketPath,
+      frame(live, { event: { ...event, sessionId: running } }),
+    );
+    await until(() => received.length === 9);
+    assert.deepEqual(
+      received.filter((entry) => entry.startsWith(running!)),
+      [
+        `${running}:SessionStart`,
+        `${running}:UserPromptSubmit`,
+        `${running}:PermissionRequest`,
+      ],
+    );
+    assert.equal(received.at(-1), `${running}:PermissionRequest`);
+    assert.deepEqual(
+      received.filter((entry) => entry.startsWith(lost!)),
+      ["lost", "UserPromptSubmit", "lost", "lost", "Stop", "lost"].map(
+        (entry) => `${lost}:${entry}`,
+      ),
+    );
+    assert.equal(checked.length, 3);
+    assert.deepEqual(
+      (await readdir(directory)).filter(
+        (name) => name === "pending" || name.startsWith("replay-"),
+      ),
+      [],
+    );
+  } finally {
+    await collector.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

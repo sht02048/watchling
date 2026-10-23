@@ -4,7 +4,9 @@ import { spawn, execFileSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 import {
   chmod,
+  lstat,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   symlink,
@@ -519,6 +521,155 @@ test("helper events drive session states through the collector", async () => {
     }
   } finally {
     await collector.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("events while the app is closed are recorded and replayed at the next launch", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "watchling-spool-test-"));
+  const descriptor = join(directory, "endpoint.json");
+  const pending = join(directory, "pending");
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAUDE_PID: String(process.pid),
+  };
+  delete env.CLAUDE_CODE_SESSION_ATTENDED;
+  const secret = "watchling-spool-secret-3b8e";
+  const asking = randomUUID();
+  const ended = randomUUID();
+  const hook = (session_id: string, hook_event_name: string, fields = {}) =>
+    JSON.stringify({
+      session_id,
+      hook_event_name,
+      cwd: "/private/spool-project",
+      prompt: secret,
+      ...fields,
+    });
+  const permission = {
+    tool_name: "Bash",
+    tool_input: { command: secret },
+  };
+  try {
+    for (const input of [
+      hook(asking, "SessionStart"),
+      hook(asking, "UserPromptSubmit"),
+      hook(ended, "SessionStart"),
+      hook(ended, "SessionEnd"),
+      hook("session-1", "SessionStart"),
+    ])
+      safe(await run(descriptor, input, undefined, binary, env));
+    // An endpoint left behind by a crashed app points at a socket that is gone.
+    await writeFile(
+      descriptor,
+      JSON.stringify({
+        version: 1,
+        epoch: randomUUID(),
+        token: "c".repeat(64),
+        socketPath: join(
+          tmpdir(),
+          `watchling-${process.getuid!()}-gone${randomUUID().slice(0, 8)}`,
+          "socket",
+        ),
+      }),
+      { mode: 0o600 },
+    );
+    safe(
+      await run(
+        descriptor,
+        hook(asking, "PermissionRequest", permission),
+        undefined,
+        binary,
+        env,
+      ),
+    );
+    assert.equal((await lstat(pending)).mode & 0o7777, 0o700);
+    assert.deepEqual(await readdir(pending), [`${asking}.jsonl`]);
+    const file = join(pending, `${asking}.jsonl`);
+    assert.equal((await lstat(file)).mode & 0o7777, 0o600);
+    const recorded = await readFile(file, "utf8");
+    assert.equal(recorded.split("\n").length, 4);
+    assert.equal(recorded.includes(secret), false);
+    assert.equal(recorded.includes("inputFingerprint"), false);
+
+    const observations = new Observations();
+    const collector = await startCollector({
+      directory,
+      onEvent: (event) => observations.receive(event),
+      onLoss: () => assert.fail("Replay reported a transport loss"),
+    });
+    try {
+      for (let i = 0; i < 400 && !observations.snapshot().sessions.length; i++)
+        await delay(5);
+      assert.deepEqual(
+        observations
+          .snapshot()
+          .sessions.map((row) => [row.id, row.state, row.detail]),
+        [[asking, "asking", { kind: "permission", tool: "Bash" }]],
+      );
+      assert.deepEqual(
+        (await readdir(directory)).filter(
+          (name) => name === "pending" || name.startsWith("replay-"),
+        ),
+        [],
+      );
+      safe(
+        await run(
+          collector.descriptorPath,
+          hook(asking, "Stop"),
+          undefined,
+          binary,
+          env,
+        ),
+      );
+      for (let i = 0; i < 400 && observations.snapshot().state !== "idle"; i++)
+        await delay(5);
+      assert.equal(observations.snapshot().state, "idle");
+      await assert.rejects(lstat(pending), { code: "ENOENT" });
+    } finally {
+      await collector.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("recorded sessions are bounded in size and count", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "watchling-spool-test-"));
+  const descriptor = join(directory, "endpoint.json");
+  const pending = join(directory, "pending");
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    CLAUDE_PID: String(process.pid),
+  };
+  const hook = (session_id: string) =>
+    JSON.stringify({
+      session_id,
+      hook_event_name: "UserPromptSubmit",
+      cwd: "/private/spool-project",
+    });
+  try {
+    const full = randomUUID();
+    safe(await run(descriptor, hook(full), undefined, binary, env));
+    await writeFile(join(pending, `${full}.jsonl`), "x".repeat(262_000), {
+      mode: 0o600,
+    });
+    safe(await run(descriptor, hook(full), undefined, binary, env));
+    const restarted = (await readFile(join(pending, `${full}.jsonl`), "utf8"))
+      .trim()
+      .split("\n");
+    assert.equal(restarted.length, 2);
+    assert.equal(restarted[0], '{"lost":true}');
+    assert.equal(JSON.parse(restarted[1]!).event.sessionId, full);
+
+    for (let i = 0; i < 31; i++)
+      await writeFile(join(pending, `${randomUUID()}.jsonl`), "", {
+        mode: 0o600,
+      });
+    const extra = randomUUID();
+    safe(await run(descriptor, hook(extra), undefined, binary, env));
+    assert.equal((await readdir(pending)).length, 32);
+    assert.equal((await readdir(pending)).includes(`${extra}.jsonl`), false);
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });

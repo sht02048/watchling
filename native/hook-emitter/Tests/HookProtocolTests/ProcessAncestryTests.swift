@@ -122,6 +122,17 @@ final class ProcessAncestryTests: XCTestCase {
         XCTAssertNil(check([:], environment: ["CLAUDE_CODE_SESSION_ATTENDED": "true"]))
     }
 
+    func testClaudeProcessIsFoundWithoutReadingAttendance() {
+        let table = FakeTable(processes: [200: shell, 100: claude(["claude", "-p"])])
+        let find = { (environment: [String: String]) in
+            ProcessAncestry.claudeProcess(environment: environment, start: 200, table: table, isActive: { true })
+        }
+        XCTAssertEqual(find([:]), 100)
+        XCTAssertEqual(find(["CLAUDE_CODE_SESSION_ATTENDED": "1"]), 100)
+        XCTAssertEqual(find(["CLAUDE_PID": "200"]), 200)
+        XCTAssertNil(find(["CLAUDE_PID": "999"]))
+    }
+
     func testDarwinTableReadsThisProcess() throws {
         let table = DarwinProcessTable()
         let pid = getpid()
@@ -130,5 +141,9 @@ final class ProcessAncestryTests: XCTestCase {
         XCTAssertEqual(arguments, CommandLine.arguments)
         XCTAssertNotNil(table.executablePath(of: pid))
         XCTAssertNil(table.parent(of: -5))
+        let started = try XCTUnwrap(table.startTime(of: pid))
+        XCTAssertLessThanOrEqual(started, Int(Date().timeIntervalSince1970))
+        XCTAssertGreaterThan(started, Int(Date().timeIntervalSince1970) - 3600)
+        XCTAssertNil(table.startTime(of: -5))
     }
 }

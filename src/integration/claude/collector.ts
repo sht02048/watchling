@@ -21,6 +21,7 @@ import {
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   decodeFrame,
   isEpoch,
@@ -28,6 +29,13 @@ import {
   isToken,
   MAX_FRAME_BYTES,
 } from "./protocol.ts";
+import {
+  claimSpool,
+  readSpool,
+  runningProcesses,
+  SPOOL_SETTLE_MS,
+  type ProcessCheck,
+} from "./spool.ts";
 import type {
   ClaudeEvent,
   Endpoint,
@@ -46,6 +54,10 @@ export interface CollectorOptions {
     identity: { eventId: string; receivedSeq: number },
   ) => void;
   onLoss: (reason: LossReason) => void;
+  // A session recorded while the app was closed whose record is incomplete.
+  onSessionLoss?: (sessionId: string) => void;
+  // Dependency injection for spool replay tests; defaults to ps.
+  checkProcesses?: ProcessCheck;
   // Fixture-only in-process observation of authenticated decisions; never IPC.
   onReceipt?: (receipt: TransportReceipt) => void;
   // Dependency injection for deterministic drain-only saturation tests; never IPC.
@@ -283,6 +295,8 @@ export async function startCollector(options: CollectorOptions) {
     );
   }
   let closing = false;
+  // Live frames wait in the queue until events recorded while the app was closed are delivered.
+  let replaying = true;
   let cancelDrain: (() => void) | undefined;
   const schedule =
     options.scheduleDrain ??
@@ -386,7 +400,7 @@ export async function startCollector(options: CollectorOptions) {
       queuedBytes += bytes;
       checkBounds();
       receipt({ ...identity, disposition: "queued", event: frame.event });
-      if (!cancelDrain) cancelDrain = schedule(drain);
+      if (!cancelDrain && !replaying) cancelDrain = schedule(drain);
     }
   }
   const server = createServer(
@@ -495,6 +509,48 @@ export async function startCollector(options: CollectorOptions) {
     await unlink(temporary).catch((error) => {
       if (!missing(error)) throw error;
     });
+  }
+  let claimed: string | null = null;
+  try {
+    claimed = await claimSpool(options.directory, endpoint.epoch);
+  } catch {
+    console.error("Recorded Claude events could not be claimed");
+  }
+  const finishReplay = (): void => {
+    replaying = false;
+    if (!closing && queue.length && !cancelDrain) cancelDrain = schedule(drain);
+  };
+  if (!claimed) finishReplay();
+  else {
+    const path = claimed;
+    void (async () => {
+      await delay(SPOOL_SETTLE_MS);
+      const sessions = await readSpool(
+        path,
+        options.checkProcesses ?? runningProcesses,
+      );
+      for (const session of sessions) {
+        if (closing) return;
+        for (const event of session.entries) {
+          if (!event) {
+            options.onSessionLoss?.(session.sessionId);
+            continue;
+          }
+          try {
+            options.onEvent(event, {
+              eventId: randomUUID(),
+              receivedSeq: ++receivedSeq,
+            });
+            counters.delivered++;
+          } catch {
+            counters.consumerFailures++;
+            loss("consumer-failed");
+          }
+        }
+      }
+    })()
+      .catch(() => console.error("Recorded Claude events could not be read"))
+      .finally(finishReplay);
   }
   let closed: Promise<void> | undefined;
   return {

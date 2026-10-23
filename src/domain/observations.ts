@@ -123,6 +123,7 @@ function shortIds(ids: readonly string[]): string[] {
 export class Observations {
   private readonly sessions = new Map<string, Session>();
   private readonly ended = new Set<string>();
+  private readonly lost = new Set<string>();
   private lossNotice = false;
   private lossSeen = false;
   private failed = false;
@@ -155,6 +156,7 @@ export class Observations {
       if (this.ended.size >= MAX_ENDED)
         this.ended.delete(this.ended.values().next().value!);
       this.ended.add(event.sessionId);
+      this.lost.delete(event.sessionId);
       return;
     }
     const opensTurn =
@@ -165,6 +167,7 @@ export class Observations {
     if (!session) {
       if (this.ended.has(event.sessionId) && !opensTurn) return;
       this.ended.delete(event.sessionId);
+      const lost = this.lost.delete(event.sessionId);
       if (this.sessions.size >= MAX_SESSIONS) {
         this.loseIntegrity();
         return;
@@ -172,7 +175,7 @@ export class Observations {
       session = {
         project: event.project,
         base: "idle",
-        unknown: this.lossSeen && !opensTurn,
+        unknown: (this.lossSeen || lost) && !opensTurn,
         idAsks: new Map(),
         fingerprintAsks: new Map(),
         unkeyedAsk: null,
@@ -318,6 +321,18 @@ export class Observations {
     this.lossNotice = true;
     this.lossSeen = true;
     for (const session of this.sessions.values()) session.unknown = true;
+    this.touch();
+  }
+
+  // Events of this session went missing; it is unknown until its next turn starts.
+  loseSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) session.unknown = true;
+    else {
+      if (this.lost.size >= MAX_SESSIONS)
+        this.lost.delete(this.lost.values().next().value!);
+      this.lost.add(sessionId);
+    }
     this.touch();
   }
 

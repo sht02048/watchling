@@ -68,16 +68,16 @@ Watchling has no Dock icon. Use the menu bar icon to show or hide Peep, turn the
 Claude Code ──hook──▶ watchling-hook-emitter ──local socket──▶ Watchling ──▶ Peep
 ```
 
-Watchling adds hooks to `~/.claude/settings.json`. For each event, Claude Code runs a small Swift helper that forwards a few fields to the app over a local Unix socket. Each hook has a one-second timeout, does nothing when the app isn't running, and never replies to Claude Code.
+Watchling adds hooks to `~/.claude/settings.json`. For each event, Claude Code runs a small Swift helper that forwards a few fields to the app over a local Unix socket. Each hook has a one-second timeout and never replies to Claude Code. While the app isn't running, the helper keeps the same fields in `~/Library/Application Support/watchling/pending`, and Watchling picks them up when it starts.
 
 ## Privacy
 
-The helper sends event metadata such as session and tool IDs, the event type, tool names, permission mode and the project folder name. Prompts, tool input and transcripts are never stored, shown or sent. Tool input is reduced to a one-way fingerprint inside the helper so permission requests can be matched to their tool calls. Watchling makes no network requests.
+The helper sends event metadata such as session and tool IDs, the event type, tool names, permission mode and the project folder name. While the app is closed, that metadata waits on disk until the next launch. Prompts, tool input and transcripts are never stored, shown or sent. Tool input is reduced to a one-way fingerprint inside the helper so permission requests can be matched to their tool calls. Watchling makes no network requests.
 
 ## FAQ
 
 **Peep doesn't react to my sessions.**
-Make sure Watchling runs from Applications and **Connected to Claude Code** is ticked in the menu bar menu. Sessions started before Watchling appear after their next prompt or tool call.
+Make sure Watchling runs from Applications and **Connected to Claude Code** is ticked in the menu bar menu. Sessions that ran while Watchling was closed appear when it starts, if their Claude Code process is still running. Sessions from before Watchling was installed appear after their next prompt or tool call.
 
 **Will it slow down Claude Code?**
 No. Each hook has a one-second timeout and returns nothing.
