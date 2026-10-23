@@ -50,7 +50,7 @@ Requires macOS 13 or later on Apple silicon.
 | ----------------------- | ------------------------------------------------ |
 | Purple, speech bubble   | A session is waiting for your approval or answer |
 | Grey                    | Watchling missed some signals and can't tell     |
-| Orange                  | Claude is working                                |
+| Orange, typing away     | Claude is working                                |
 | Blue, companions on top | Only background agents are running               |
 | Mint, a dot circling    | Claude waits on a background task                |
 | Coral, then dozes off   | Nothing to do                                    |

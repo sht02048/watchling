@@ -31,6 +31,7 @@ interface Figure extends Pose {
   t: number;
   sleep: number;
   orbit: number;
+  typing: number;
   phase: number;
   rotPhase: number;
   tilt: number;
@@ -91,6 +92,7 @@ const SLEEP: Pose = {
 const SLEEP_DELAY = 180;
 const WAITING_SLEEP_DELAY = 600;
 const ORBIT_SPEED = 1.5;
+const TYPING_RATE = 9;
 // Waiting on a background task naps like idle, so a dev server left running does not keep Peep up.
 const resting = (state: SemanticState): boolean =>
   state === "idle" || state === "waiting";
@@ -115,10 +117,10 @@ const POSES: Record<SemanticState, Pose> = {
     speed: 1.6,
     sx: 1.02,
     sy: 0.98,
-    eye: 0.6,
-    lookY: 0.3,
+    eye: 0.75,
+    lookY: 0.9,
     breathe: 0,
-    pulse: 0.55,
+    pulse: 0.15,
     field: 0.95,
     wave: 0.6,
     rot: 0.3,
@@ -276,17 +278,58 @@ function drawEyes(ctx: CanvasRenderingContext2D, f: Figure, r: number): void {
       continue;
     }
     const height = Math.max(0.018, 0.13 * f.eye * (1 - f.sleep));
-    ctx.ellipse(
-      x * r,
-      y * r + (0.13 * f.eye - height) * k * 0.5,
-      0.085 * k,
-      height * k,
-      f.tilt,
-      0,
-      TAU,
+    const cy = y * r + (0.13 * f.eye - height) * k * 0.5;
+    ctx.save();
+    if (f.typing > 0.01) {
+      // A flat upper lid reads as concentration while typing.
+      const cut = cy - height * k * (1 - f.typing * 0.315);
+      ctx.beginPath();
+      ctx.rect(x * r - k * 0.2, cut, k * 0.4, k);
+      ctx.clip();
+      ctx.beginPath();
+    }
+    ctx.ellipse(x * r, cy, 0.085 * k, height * k, f.tilt, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// A small keyboard under Peep while it works; two keys dip on each beat.
+function drawKeyboard(
+  ctx: CanvasRenderingContext2D,
+  f: Figure,
+  r: number,
+): void {
+  if (f.typing < 0.01) return;
+  const w = r * 1.5;
+  const h = r * 0.3;
+  const top = r * 1.12 + (1 - f.typing) * r * 0.25;
+  const keys = 6;
+  const gap = r * 0.035;
+  const key = (w - gap * (keys + 1)) / keys;
+  const beat = f.t * TYPING_RATE;
+  const step = Math.floor(beat);
+  ctx.save();
+  ctx.globalAlpha = f.typing;
+  ctx.fillStyle = "rgba(43,33,29,.82)";
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, top, w, h, h * 0.3);
+  ctx.fill();
+  for (let i = 0; i < keys; i++) {
+    const hit = (step * 7 + 3) % keys === i || (step * 5 + 1) % keys === i;
+    const down = hit ? 1 - (beat % 1) : 0;
+    ctx.fillStyle = hit ? rgb(f.c1, 0.95) : "rgba(255,255,255,.75)";
+    ctx.beginPath();
+    ctx.roundRect(
+      -w / 2 + gap + i * (key + gap),
+      top + gap + down * r * 0.03,
+      key,
+      h - gap * 2 - r * 0.03,
+      r * 0.03,
     );
     ctx.fill();
   }
+  ctx.restore();
 }
 
 // A small satellite circles Peep while a background task runs; on the back half
@@ -390,6 +433,7 @@ function draw(
   ctx.fillRect(-r * 2, -r * 2, r * 4, r * 4);
   ctx.restore();
   drawEyes(ctx, f, r);
+  drawKeyboard(ctx, f, r);
   drawSnores(ctx, f, r);
   drawSatellite(ctx, f, r, body);
   return body;
@@ -441,7 +485,15 @@ export function createPet(
   const c2 = colorSprings(PALETTE.unknown[1]);
   const sleep = spring(0);
   const orbit = spring(0);
-  const springs = [...Object.values(params), ...c1, ...c2, sleep, orbit];
+  const typing = spring(0);
+  const springs = [
+    ...Object.values(params),
+    ...c1,
+    ...c2,
+    sleep,
+    orbit,
+    typing,
+  ];
   const squash = spring(0);
   let shown: SemanticState = "unknown";
   let idleSince = 0;
@@ -451,6 +503,7 @@ export function createPet(
     t: 0,
     sleep: 0,
     orbit: 0,
+    typing: 0,
     phase: 0,
     rotPhase: 0,
     tilt: 0,
@@ -486,6 +539,11 @@ export function createPet(
     figure.sx /= Math.sqrt(stretch * snore);
     figure.sy *= stretch * snore;
     figure.offY = 0.04 * figure.sleep;
+    figure.typing = Math.min(1, Math.max(0, typing.v));
+    const hop = Math.abs(Math.sin(figure.t * Math.PI * 4.5)) * figure.typing;
+    figure.offY -= hop * 0.045 + figure.typing * 0.06;
+    figure.sy *= 1 + 0.03 * hop;
+    figure.sx /= 1 + 0.03 * hop;
     figure.orbit = Math.min(1, Math.max(0, orbit.v));
     const angle = figure.t * ORBIT_SPEED;
     figure.lookX += (Math.cos(angle) * 0.9 - figure.lookX) * figure.orbit;
@@ -581,6 +639,7 @@ export function createPet(
         sleep.target = 0;
       }
       orbit.target = state === "waiting" ? 1 : 0;
+      typing.target = state === "working" ? 1 : 0;
       shown = state;
       const pose = asleep ? SLEEP : POSES[state];
       for (const key of POSE_KEYS) params[key].target = pose[key];
