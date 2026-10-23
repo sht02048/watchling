@@ -75,7 +75,8 @@ function finish(event: PointerEvent, cancelled: boolean): void {
 }
 canvas.addEventListener("contextmenu", (event) => {
   event.preventDefault();
-  if (pet.hitTest(event.offsetX, event.offsetY)) window.watchling.showPetMenu();
+  if (pet.hitTest(event.offsetX, event.offsetY))
+    window.watchling.showPetMenu({ x: event.offsetX, y: event.offsetY });
 });
 canvas.addEventListener("pointerup", (event) => finish(event, false));
 canvas.addEventListener("pointercancel", (event) => finish(event, true));

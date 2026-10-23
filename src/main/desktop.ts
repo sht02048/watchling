@@ -675,10 +675,15 @@ async function start(options: DesktopOptions): Promise<void> {
     },
     endDrag,
     openList: showList,
-    petMenu: () => {
+    petMenu: (at) => {
       if (!pet || dragging) return;
+      const { width, height } = pet.getBounds();
       list?.hide();
-      appMenu().popup({ window: pet });
+      appMenu().popup({
+        window: pet,
+        x: Math.round(Math.min(Math.max(at.x, 0), width)),
+        y: Math.round(Math.min(Math.max(at.y, 0), height)),
+      });
     },
     closeList: () => list?.hide(),
     copy: (text) => clipboard.writeText(text),

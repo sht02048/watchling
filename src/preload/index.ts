@@ -37,7 +37,10 @@ const bridge: PetBridge = Object.freeze({
   },
   endDrag: () => ipcRenderer.send("watchling:drag-end"),
   openSessionList: () => ipcRenderer.send("watchling:list-open"),
-  showPetMenu: () => ipcRenderer.send("watchling:pet-menu"),
+  showPetMenu: (at: Point) => {
+    if (isPoint(at))
+      ipcRenderer.send("watchling:pet-menu", { x: at.x, y: at.y });
+  },
   closeSessionList: () => ipcRenderer.send("watchling:list-close"),
   copySessionId: (id: string) => {
     if (typeof id === "string")

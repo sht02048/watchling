@@ -25,7 +25,7 @@ export function attachIpc(options: {
   beginDrag: (cursor: Point) => void;
   endDrag: () => void;
   openList: () => void;
-  petMenu: () => void;
+  petMenu: (at: Point) => void;
   closeList: () => void;
   copy: (text: string) => void;
   focus: (id: string) => void;
@@ -81,13 +81,15 @@ export function attachIpc(options: {
   listen("watchling:pet-hit", "pet", (...args) => {
     if (args.length === 1 && typeof args[0] === "boolean") options.hit(args[0]);
   });
+  listen("watchling:pet-menu", "pet", (...args) => {
+    if (args.length === 1 && isPoint(args[0])) options.petMenu(args[0]);
+  });
   listen("watchling:drag-start", "pet", (...args) => {
     if (args.length === 1 && isPoint(args[0])) options.beginDrag(args[0]);
   });
   for (const [channel, handler] of [
     ["watchling:drag-end", options.endDrag],
     ["watchling:list-open", options.openList],
-    ["watchling:pet-menu", options.petMenu],
   ] as const) {
     listen(channel, "pet", (...args) => {
       if (args.length === 0) handler();
