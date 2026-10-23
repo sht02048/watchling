@@ -49,7 +49,7 @@ Requires macOS 13 or later on Apple silicon.
 | Grey                    | Watchling missed some signals and can't tell     |
 | Orange                  | Claude is working                                |
 | Blue, companions on top | Only background agents are running               |
-| Coral                   | Nothing to do                                    |
+| Coral, then dozes off   | Nothing to do                                    |
 
 With several sessions open, Peep shows the one highest in this table. See [docs/state-model.md](docs/state-model.md) for the full rules.
 

@@ -29,6 +29,7 @@ interface Pose {
 
 interface Figure extends Pose {
   t: number;
+  sleep: number;
   phase: number;
   rotPhase: number;
   tilt: number;
@@ -76,6 +77,17 @@ const IDLE: Pose = {
   rot: 0.05,
   droop: 0,
 };
+const SLEEP: Pose = {
+  ...IDLE,
+  speed: 0.25,
+  breathe: 0,
+  field: 0.45,
+  wave: 0.03,
+  rot: 0.02,
+  droop: 0.35,
+};
+// Matches how long the app waits before dimming an idle Peep.
+const SLEEP_DELAY = 5;
 const POSES: Record<SemanticState, Pose> = {
   idle: IDLE,
   background: {
@@ -242,16 +254,52 @@ function drawEyes(ctx: CanvasRenderingContext2D, f: Figure, r: number): void {
     const v = (-0.1 + f.lookY * 0.1) * SHAPE.eyeScale * CORE;
     const [x, y] = toScreen(f, u, v);
     ctx.beginPath();
+    if (f.sleep > 0.85) {
+      const w = 0.085 * k;
+      ctx.lineWidth = 0.034 * k;
+      ctx.moveTo(x * r - w, y * r - 0.01 * k);
+      ctx.quadraticCurveTo(
+        x * r,
+        y * r + 0.06 * k,
+        x * r + w,
+        y * r - 0.01 * k,
+      );
+      ctx.stroke();
+      continue;
+    }
+    const height = Math.max(0.018, 0.13 * f.eye * (1 - f.sleep));
     ctx.ellipse(
       x * r,
-      y * r,
+      y * r + (0.13 * f.eye - height) * k * 0.5,
       0.085 * k,
-      Math.max(0.018, 0.13 * f.eye) * k,
+      height * k,
       f.tilt,
       0,
       TAU,
     );
     ctx.fill();
+  }
+}
+
+function drawSnores(ctx: CanvasRenderingContext2D, f: Figure, r: number): void {
+  if (f.sleep < 0.01) return;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let i = 0; i < 3; i++) {
+    const u = (f.t / 2.6 + i / 3) % 1;
+    ctx.save();
+    ctx.translate(
+      r * (0.5 + u * 0.3) + Math.sin(u * TAU) * r * 0.05,
+      -r * (0.6 + u * 0.55),
+    );
+    ctx.rotate(-0.15);
+    ctx.font = `700 ${Math.round(r * (0.22 + u * 0.14))}px -apple-system, system-ui, sans-serif`;
+    ctx.fillStyle = rgb(
+      [f.c2[0] - 0.12, f.c2[1], f.c2[2]],
+      0.85 * f.sleep * Math.sin(Math.PI * u),
+    );
+    ctx.fillText("z", 0, 0);
+    ctx.restore();
   }
 }
 
@@ -304,6 +352,7 @@ function draw(
   ctx.fillRect(-r * 2, -r * 2, r * 4, r * 4);
   ctx.restore();
   drawEyes(ctx, f, r);
+  drawSnores(ctx, f, r);
   return body;
 }
 
@@ -351,12 +400,16 @@ export function createPet(
   };
   const c1 = colorSprings(PALETTE.unknown[0]);
   const c2 = colorSprings(PALETTE.unknown[1]);
-  const springs = [...Object.values(params), ...c1, ...c2];
+  const sleep = spring(0);
+  const springs = [...Object.values(params), ...c1, ...c2, sleep];
   const squash = spring(0);
   let shown: SemanticState = "unknown";
+  let idleSince = 0;
+  let asleep = false;
   const figure: Figure = {
     ...initial,
     t: 0,
+    sleep: 0,
     phase: 0,
     rotPhase: 0,
     tilt: 0,
@@ -387,8 +440,11 @@ export function createPet(
       figure.breathe * 0.022 * Math.sin(figure.t * 1.7) +
       figure.pulse * 0.045 * Math.sin(figure.t * 9) +
       squash.v * 0.12;
-    figure.sx /= Math.sqrt(stretch);
-    figure.sy *= stretch;
+    figure.sleep = Math.min(1, Math.max(0, sleep.v));
+    const snore = 1 + 0.045 * figure.sleep * Math.sin(figure.t * 1.15);
+    figure.sx /= Math.sqrt(stretch * snore);
+    figure.sy *= stretch * snore;
+    figure.offY = 0.04 * figure.sleep;
     figure.tilt = figure.sway * 0.1 * Math.sin(figure.t * 0.9);
     figure.eye *= 1 - blink * 0.92;
     for (const channel of COLOR_CHANNELS) {
@@ -449,6 +505,11 @@ export function createPet(
     figure.t += dt;
     figure.phase += params.speed.v * dt;
     figure.rotPhase += params.rot.v * dt;
+    if (shown === "idle" && !asleep && figure.t - idleSince >= SLEEP_DELAY) {
+      asleep = true;
+      sleep.target = 1;
+      for (const key of POSE_KEYS) params[key].target = SLEEP[key];
+    }
     if (pixelRatio() !== ratio) resize();
     else render();
     frame = requestAnimationFrame(tick);
@@ -468,8 +529,14 @@ export function createPet(
         params.field.vel += 1.5;
       }
       if (state === "asking" && shown !== "asking") askedAt = figure.t;
+      if (state === "idle" && shown !== "idle") idleSince = figure.t;
+      if (state !== "idle") {
+        asleep = false;
+        sleep.target = 0;
+      }
       shown = state;
-      for (const key of POSE_KEYS) params[key].target = POSES[state][key];
+      const pose = asleep ? SLEEP : POSES[state];
+      for (const key of POSE_KEYS) params[key].target = pose[key];
       for (const channel of COLOR_CHANNELS) {
         c1[channel].target = PALETTE[state][0][channel];
         c2[channel].target = PALETTE[state][1][channel];
