@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { DOWNLOAD, REPO } from "@/app/links.ts";
+import { REPO, useDownloadUrl } from "@/app/links.ts";
 import { Glyph } from "@/components/icons/Glyph.tsx";
 import styles from "./MenuBar.module.css";
 
@@ -50,6 +50,7 @@ function AppMenu({
   onToggleConnected: () => void;
   onShowSessions: () => void;
 }) {
+  const download = useDownloadUrl();
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -103,7 +104,7 @@ function AppMenu({
           Show Sessions
         </button>
         <div className={styles.separator} role="separator" />
-        <a className={styles.dropdownItem} href={DOWNLOAD} role="menuitem">
+        <a className={styles.dropdownItem} href={download} role="menuitem">
           Download Watchling…
         </a>
         <a className={styles.dropdownItem} href={REPO} role="menuitem">
@@ -133,6 +134,7 @@ export function MenuBar({
   onShowSessions: () => void;
   onToggleSessions: () => void;
 }) {
+  const download = useDownloadUrl();
   return (
     <header className={styles.menubar}>
       <div className={styles.side}>
@@ -164,7 +166,7 @@ export function MenuBar({
         <a className={styles.item} href={REPO} aria-label="Watchling on GitHub">
           <Glyph name="github" className={styles.trayIcon} />
         </a>
-        <a className={clsx(styles.item, styles.strong)} href={DOWNLOAD}>
+        <a className={clsx(styles.item, styles.strong)} href={download}>
           Download
         </a>
         <Clock />

@@ -109,12 +109,10 @@ jobs:
         run: |
           flags=()
           case "$GITHUB_REF_NAME" in *-*) flags+=(--prerelease) ;; esac
-          # The site links to releases/latest/download/Watchling.dmg, so the unversioned copy stays.
           versioned="Watchling-${GITHUB_REF_NAME#v}.dmg"
-          cp Watchling.dmg "$versioned"
+          mv Watchling.dmg "$versioned"
           gh release create "$GITHUB_REF_NAME" \
             "$versioned" \
-            Watchling.dmg \
             -R "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "Watchling $GITHUB_REF_NAME" \
