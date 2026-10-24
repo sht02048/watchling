@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/watchling.gif" width="800" alt="Peep turns orange while Claude works, carries companions for background agents, turns purple with a speech bubble when a session needs you, and opens the session list on click">
+  <img src="docs/assets/watchling.gif" width="800" alt="Peep types away while Claude works, turns blue with companions for background agents and mint while a build runs, turns purple with a speech bubble when a session needs you, opens the session list on click, jumps back to the right terminal tab, naps and dims when nothing happens, and follows the most urgent of six sessions">
 </p>
 
 Start a long task, switch to something else, and look up when Peep turns purple. Click the waiting session in the list to jump straight back to its terminal. Peep busies itself while Claude works, carries little companions when background agents run, and pops a speech bubble when a session is waiting for your approval or answer. Watchling only watches: it never answers prompts or approves tools for you.
