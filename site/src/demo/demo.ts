@@ -10,6 +10,7 @@ export const choices = [
   { id: "work", label: "Work on a task", state: "working" },
   { id: "ask", label: "Ask for permission", state: "asking" },
   { id: "agents", label: "Run background agents", state: "subagents" },
+  { id: "build", label: "Run a build in the background", state: "waiting" },
   { id: "disconnect", label: "Lose the connection", state: "unknown" },
 ] as const satisfies readonly {
   id: string;
@@ -31,6 +32,7 @@ export type Prompt =
   | { kind: "permission"; tool: string; command: string }
   | { kind: "reconnect" }
   | { kind: "agents" }
+  | { kind: "build" }
   | { kind: "task" }
   | { kind: "busy" };
 
@@ -103,7 +105,19 @@ const AGENT_LINES: Line[] = [
   { kind: "result", text: "Running in the background" },
   { kind: "text", text: "Both agents are on it. I'll report back." },
 ];
+const BUILD_LINES: Line[] = [
+  { kind: "user", text: "Build the app in the background" },
+  { kind: "tool", text: "Bash(pnpm build)", tool: "Bash" },
+  { kind: "result", text: "Running in the background" },
+  { kind: "text", text: "The build is running. I'll check it when it ends." },
+];
+const BUILD_DONE_LINES: Line[] = [
+  { kind: "result", text: "Background build finished" },
+  { kind: "done", text: "The build passed." },
+  peep("The build is done and Claude wrapped up, so I'm idle again.", "idle"),
+];
 const TASK_SECONDS = 5;
+const BUILD_SECONDS = 6;
 const AGENT_NAMES = ["Review the docs", "Audit dependencies"];
 const rank = (state: SemanticState) => semanticStates.indexOf(state);
 
@@ -138,6 +152,7 @@ export function createDemo(options: {
 
   let agentTimers: ReturnType<typeof setTimeout>[] = [];
   let taskTimer: ReturnType<typeof setTimeout> | undefined;
+  let buildTimer: ReturnType<typeof setTimeout> | undefined;
   let agentsLeft: string[] = [];
 
   function later(
@@ -275,6 +290,34 @@ export function createDemo(options: {
     stream(lines, ready);
   }
 
+  function build(): void {
+    set("working", { kind: "tool", tool: "Bash" });
+    stream(BUILD_LINES, () => {
+      set("waiting", { kind: "tasks", count: 1 });
+      terminal.lines.push(
+        peep(
+          "The main turn is done, but the build still runs. I turned mint, and a dot circles me until it ends.",
+          "waiting",
+        ),
+      );
+      terminal.prompt = { kind: "build" };
+      options.onChange();
+      buildTimer = later(BUILD_SECONDS, finishBuild);
+    });
+  }
+
+  function finishBuild(): void {
+    if (terminal.prompt.kind !== "build") return;
+    if (buildTimer !== undefined) {
+      clearTimeout(buildTimer);
+      timers.delete(buildTimer);
+      buildTimer = undefined;
+    }
+    terminal.prompt = { kind: "busy" };
+    set("working", { kind: "tool", tool: "Bash" });
+    stream(BUILD_DONE_LINES, ready);
+  }
+
   function setConnected(next: boolean): void {
     if (next === connected) return;
     connected = next;
@@ -333,6 +376,7 @@ export function createDemo(options: {
       terminal.prompt = { kind: "busy" };
       if (choice === "work") work();
       else if (choice === "ask") ask();
+      else if (choice === "build") build();
       else agents();
     },
     answer(allow: boolean): void {
@@ -342,6 +386,7 @@ export function createDemo(options: {
       stream(allow ? APPROVED_LINES : DENIED_LINES, ready);
     },
     finishAgents,
+    finishBuild,
     finishTask,
     setConnected,
     snapshot,

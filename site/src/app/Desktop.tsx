@@ -153,6 +153,7 @@ export function Desktop({
             choose: demo.choose,
             answer: demo.answer,
             finishAgents: demo.finishAgents,
+            finishBuild: demo.finishBuild,
             finishTask: demo.finishTask,
             reconnect: () => demo.setConnected(true),
           }}

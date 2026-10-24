@@ -8,27 +8,28 @@ import {
 } from "@watchling/shared/ui-contract.ts";
 import styles from "./StateStrip.module.css";
 
-// The demo has no background shell tasks, so it never shows the waiting state.
-type DemoState = Exclude<SemanticState, "waiting">;
-const ORDER: readonly DemoState[] = [
+const ORDER: readonly SemanticState[] = [
   "idle",
   "working",
   "asking",
   "subagents",
+  "waiting",
   "unknown",
 ];
-const MEANING: Record<DemoState, string> = {
+const MEANING: Record<SemanticState, string> = {
   idle: "Waiting for you",
   working: "Claude is busy",
   asking: "Claude needs you",
   subagents: "Agents still running",
+  waiting: "A background task runs",
   unknown: "Signals lost",
 };
-const HOW: Record<DemoState, string> = {
+const HOW: Record<SemanticState, string> = {
   idle: "Shown on load",
   working: "Pick Work on a task",
   asking: "Pick Ask for permission",
   subagents: "Pick Run background agents",
+  waiting: "Pick Run a build in the background",
   unknown: "Pick Lose the connection",
 };
 
@@ -54,7 +55,7 @@ export function StateStrip({
         </h2>
         <p className={styles.count} aria-live="polite">
           {found.size === ORDER.length
-            ? "All 5 found"
+            ? `All ${ORDER.length} found`
             : `${found.size} of ${ORDER.length} found`}
         </p>
       </header>

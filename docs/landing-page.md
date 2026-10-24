@@ -19,10 +19,11 @@ The visitor changes Peep's state only by choosing in the terminal, or with the m
 - **Menu:** "What should Claude do?", with:
   1. Work on a task: working while tool lines stream in. It finishes on its own about 5 seconds after it starts, or at once with "Finish task".
   2. Ask for permission: asking straight away, with the Yes/No prompt.
-  3. Run background agents: background, with the agents riding on Peep. A "Finish now" option ends them at once; otherwise they finish one by one after `agentDurations`.
-  4. Lose the connection: unknown, with a "Reconnect to Claude Code" option.
+  3. Run background agents: subagents, with the agents riding on Peep. A "Finish now" option ends them at once; otherwise they finish one by one after `agentDurations`.
+  4. Run a build in the background: waiting, mint with a dot circling Peep while the build runs. It finishes on its own about 6 seconds later, or at once with "Finish build".
+  5. Lose the connection: unknown, with a "Reconnect to Claude Code" option.
 - **Controls:** keyboard first, like Claude Code. `↑`/`↓` move and `Enter` chooses; the footer reads "↑↓ to move · Enter to choose". The keys work page-wide without clicking first, except in form fields, while the Watchling menu is open, or with a modifier key held. The Yes/No prompt also takes `←`/`→`, with Yes selected first. Clicking an option works too. Options are buttons with a moving `❯` and roving focus. Rows are 34px tall, or 44px on touch screens.
-- **States that last:** working, asking, background and unknown can be ended from the terminal: "Finish task", Yes/No, "Finish now", or "Reconnect to Claude Code". The terminal's controls show the selection with the moving `❯` and highlight rather than a focus ring.
+- **States that last:** working, asking, subagents, waiting and unknown can be ended from the terminal: "Finish task", Yes/No, "Finish now", "Finish build", or "Reconnect to Claude Code". The terminal's controls show the selection with the moving `❯` and highlight rather than a focus ring.
 - **After each flow:** a short wrap-up line and a Peep line explaining Peep's state, then the menu again. This repeats without end.
 - **Peep lines:** wrapped lines hang-indent so they line up with the message, not under the "Peep" label.
 - **Progress:** the "Peep's states" list tracks which states have been found, and its hints name the option that shows each state. The menu itself carries no marks.

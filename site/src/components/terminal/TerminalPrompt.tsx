@@ -19,6 +19,7 @@ export interface PromptActions {
   choose: (choice: Choice) => void;
   answer: (allow: boolean) => void;
   finishAgents: () => void;
+  finishBuild: () => void;
   finishTask: () => void;
   reconnect: () => void;
 }
@@ -40,6 +41,11 @@ const SINGLE = {
   agents: {
     title: "⧗ Background agents running",
     label: "Finish now",
+    status: true,
+  },
+  build: {
+    title: "◷ Background task running",
+    label: "Finish build",
     status: true,
   },
   task: { title: "✻ Working…", label: "Finish task", status: true },
@@ -82,10 +88,12 @@ function controlsFor(
       }));
     case "reconnect":
     case "agents":
+    case "build":
     case "task": {
       const run = {
         reconnect: actions.reconnect,
         agents: actions.finishAgents,
+        build: actions.finishBuild,
         task: actions.finishTask,
       }[prompt.kind];
       return [
@@ -248,6 +256,7 @@ export function TerminalPrompt({
       );
     case "reconnect":
     case "agents":
+    case "build":
     case "task": {
       const { title, status } = SINGLE[prompt.kind];
       return (
