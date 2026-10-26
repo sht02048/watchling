@@ -8,7 +8,7 @@ Comparable projects reach the same limit. Those that know exact wait timing do s
 
 ## States
 
-Displayed priority: `asking > unknown > working > subagents > waiting > idle`. The pet shows the highest state across sessions.
+Displayed priority: `asking > unknown > working > subagents > waiting > idle`. The pet shows the highest state across sessions, leaving out any the user stopped tracking from the session list ([`session-list.md`](session-list.md)); those are still reduced, so resuming shows their current state.
 
 | State        | Meaning                                                  | Enter                                                                                                                                                                              | Leave                                                                                                                                                                                         |
 | ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

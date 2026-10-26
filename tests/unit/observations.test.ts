@@ -1384,3 +1384,40 @@ test("an interrupt or a failed stop keeps the last task count, and SessionEnd dr
   assert.deepEqual(observations.snapshot().sessions, []);
   assert.equal(observations.snapshot().state, "idle");
 });
+
+test("an untracked session stays listed but leaves the pet's state and companions", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit", { sessionId: "a" }),
+    event("PostToolUse", {
+      sessionId: "a",
+      toolName: "Agent",
+      toolUseId: "launch",
+      childAgentId: "agent-1",
+      childStatus: "async_launched",
+    }),
+    event("PermissionRequest", { sessionId: "a", toolName: "Bash" }),
+    event("UserPromptSubmit", { sessionId: "b" }),
+  );
+  observations.setTracked("missing", false);
+  observations.setTracked("a", false);
+  let snapshot = observations.snapshot();
+  assert.equal(snapshot.state, "working");
+  assert.equal(snapshot.companions, 0);
+  assert.deepEqual(
+    snapshot.sessions.map((row) => [row.id, row.state, row.untracked]),
+    [
+      ["a", "asking", true],
+      ["b", "working", undefined],
+    ],
+  );
+  observations.setTracked("a", true);
+  snapshot = observations.snapshot();
+  assert.equal(snapshot.state, "asking");
+  assert.equal(snapshot.companions, 1);
+  observations.setTracked("a", false);
+  feed(observations, event("SessionEnd", { sessionId: "a" }));
+  feed(observations, event("SessionStart", { sessionId: "a" }));
+  assert.equal(observations.snapshot().sessions[1]?.untracked, undefined);
+});

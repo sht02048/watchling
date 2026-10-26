@@ -18,7 +18,11 @@ let timers: [HTMLElement, number][] = [];
 
 const rank = (session: SessionSummary) => semanticStates.indexOf(session.state);
 const urgency = (a: SessionSummary, b: SessionSummary) =>
-  rank(b) - rank(a) || b.since - a.since;
+  Number(Boolean(a.untracked)) - Number(Boolean(b.untracked)) ||
+  rank(b) - rank(a) ||
+  b.since - a.since;
+const asking = (session: SessionSummary) =>
+  session.state === "asking" && !session.untracked;
 const plural = (count: number, word: string) =>
   `${count} ${word}${count === 1 ? "" : "s"}`;
 const needYou = (count: number) => `${count} need${count === 1 ? "s" : ""} you`;
@@ -29,6 +33,7 @@ function tool(name: string): string {
 }
 
 function summary(session: SessionSummary): string {
+  if (session.untracked) return "Not tracked";
   const detail = session.detail;
   switch (session.state) {
     case "asking":
@@ -77,15 +82,21 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 function dot(session: SessionSummary): HTMLElement[] {
   const mark = el("span", "dot");
-  mark.style.background = rgb(PALETTE[session.state][1]);
+  if (!session.untracked)
+    mark.style.background = rgb(PALETTE[session.state][1]);
   mark.setAttribute("aria-hidden", "true");
   return [
     mark,
-    el("span", "visually-hidden", `${stateLabels[session.state]}:`),
+    el(
+      "span",
+      "visually-hidden",
+      `${session.untracked ? "Not tracked" : stateLabels[session.state]}:`,
+    ),
   ];
 }
 
 function time(session: SessionSummary): HTMLElement {
+  if (session.untracked) return el("span", "time");
   const node = el("span", "time", elapsed(session.since));
   timers.push([node, session.since]);
   return node;
@@ -118,7 +129,11 @@ function line(
 ): HTMLLIElement {
   const row = el(
     "li",
-    session.state === "asking" ? `${className} asking` : className,
+    asking(session)
+      ? `${className} asking`
+      : session.untracked
+        ? `${className} untracked`
+        : className,
   );
   const text = summary(session);
   const detail = el("span", "detail", text);
@@ -165,7 +180,7 @@ function activeRow(): HTMLElement | null {
 
 function render(snapshot: Snapshot): void {
   const sessions = [...snapshot.sessions].sort(urgency);
-  const asks = sessions.filter((session) => session.state === "asking").length;
+  const asks = sessions.filter(asking).length;
   total!.textContent =
     sessions.length > 0
       ? plural(sessions.length, "session")
@@ -195,9 +210,12 @@ function render(snapshot: Snapshot): void {
       el("span", "count", String(group.length)),
       el("span", "visually-hidden", " sessions"),
     );
-    const waiting = group.filter((session) => session.state === "asking");
+    const waiting = group.filter(asking);
     const block = el("li", "group");
-    const head = el("div", lead.state === "asking" ? "row asking" : "row");
+    const head = el(
+      "div",
+      asking(lead) ? "row asking" : lead.untracked ? "row untracked" : "row",
+    );
     head.append(
       ...dot(lead),
       name,

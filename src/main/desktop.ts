@@ -451,7 +451,9 @@ function updatePresence(): void {
 function currentActivity(): Activity {
   if (snapshot.state === "waiting") return "waiting";
   if (snapshot.state !== "idle") return "active";
-  return snapshot.sessions.length === 0 ? "empty" : "idle";
+  return snapshot.sessions.every((session) => session.untracked)
+    ? "empty"
+    : "idle";
 }
 
 function updateActivity(): void {
@@ -710,6 +712,14 @@ async function start(options: DesktopOptions): Promise<void> {
             ]
           : []),
         { label: "Copy Session ID", click: () => clipboard.writeText(id) },
+        { type: "separator" },
+        {
+          label: session.untracked ? "Resume Tracking" : "Stop Tracking",
+          click: () => {
+            observations.setTracked(id, Boolean(session.untracked));
+            queueSnapshot();
+          },
+        },
       ]).popup({ window: list });
     },
   });

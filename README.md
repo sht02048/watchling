@@ -117,6 +117,9 @@ With **Hide When No Sessions** on, Peep steps away three minutes after your last
 **Will it slow down Claude Code?**
 No. Each hook has a one-second timeout and returns nothing.
 
+**Can Peep ignore a session?**
+Right-click it in the session list and choose **Stop Tracking**. It stays in the list, dimmed, but no longer changes Peep. Choose **Resume Tracking** to bring it back; Watchling forgets the choice when the session ends or Watchling quits.
+
 **Can I approve permission requests from Peep?**
 No, by design. Watchling only tells you that a session needs you; you answer in the terminal.
 

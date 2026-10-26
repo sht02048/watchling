@@ -32,6 +32,8 @@ export interface SessionSummary {
   detail: SessionDetail | null;
   focusable?: true;
   terminalName?: string;
+  // Listed, but left out of the pet's state and companions until tracked again.
+  untracked?: true;
 }
 
 export interface Snapshot {

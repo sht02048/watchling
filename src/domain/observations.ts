@@ -175,6 +175,7 @@ export class Observations {
   private readonly sessions = new Map<string, Session>();
   private readonly ended = new Set<string>();
   private readonly lost = new Set<string>();
+  private readonly untracked = new Set<string>();
   private lossNotice = false;
   private lossSeen = false;
   private failed = false;
@@ -208,6 +209,7 @@ export class Observations {
         this.ended.delete(this.ended.values().next().value!);
       this.ended.add(event.sessionId);
       this.lost.delete(event.sessionId);
+      this.untracked.delete(event.sessionId);
       return;
     }
     const opensTurn =
@@ -427,6 +429,11 @@ export class Observations {
     this.failed = true;
   }
 
+  setTracked(sessionId: string, tracked: boolean): void {
+    if (tracked) this.untracked.delete(sessionId);
+    else if (this.sessions.has(sessionId)) this.untracked.add(sessionId);
+  }
+
   terminal(sessionId: string): TerminalLocation | null {
     return this.sessions.get(sessionId)?.terminal ?? null;
   }
@@ -434,15 +441,18 @@ export class Observations {
   snapshot(): Snapshot {
     const ids = [...this.sessions.keys()];
     const states = ids.map((id) => display(this.sessions.get(id)!));
-    if (this.failed || this.lossNotice) states.push("unknown");
-    const state = states.reduce<SemanticState>(
+    const tracked = states.filter(
+      (_, index) => !this.untracked.has(ids[index]!),
+    );
+    if (this.failed || this.lossNotice) tracked.push("unknown");
+    const state = tracked.reduce<SemanticState>(
       (highest, next) =>
         priority.indexOf(next) > priority.indexOf(highest) ? next : highest,
       "idle",
     );
     let companions = 0;
-    for (const session of this.sessions.values())
-      companions += agentCount(session);
+    for (const [id, session] of this.sessions)
+      if (!this.untracked.has(id)) companions += agentCount(session);
     const projects = new Map<string, string[]>();
     for (const [id, session] of this.sessions)
       projects.set(session.project, [
@@ -471,6 +481,7 @@ export class Observations {
           detail: detail(session, states[index]!),
           ...(session.terminal ? { focusable: true as const } : {}),
           ...(name ? { terminalName: name } : {}),
+          ...(this.untracked.has(id) ? { untracked: true as const } : {}),
         };
       }),
     };
