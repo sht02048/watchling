@@ -59,6 +59,18 @@ test("packaged hooks CLI preserves existing settings in disposable HOME", async 
     );
     const installed = await readFile(paths.settingsPath);
     assert.notDeepEqual(installed, before);
+    assert.equal(
+      (
+        JSON.parse(installed.toString("utf8")) as {
+          env: Record<string, string>;
+        }
+      ).env.CLAUDE_CODE_PLUGIN_DIRS,
+      paths.pluginDirectory,
+    );
+    assert.deepEqual(
+      await readFile(join(paths.pluginDirectory, "hooks/register.js")),
+      await readFile("resources/claude-mod/hooks/register.js"),
+    );
     await run("check");
     await run("install", "--apply");
     assert.deepEqual(await readFile(paths.settingsPath), installed);
@@ -73,6 +85,7 @@ test("packaged hooks CLI preserves existing settings in disposable HOME", async 
       edited,
     );
     await assert.rejects(readFile(paths.manifestPath), { code: "ENOENT" });
+    await assert.rejects(readdir(paths.pluginDirectory), { code: "ENOENT" });
   } finally {
     await rm(home, { recursive: true, force: true });
   }

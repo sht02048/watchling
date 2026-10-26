@@ -90,4 +90,4 @@ Evidence: `build/verification/live-interactive-AskUserQuestion-1792561891860.jso
 
 Official references: [hooks](https://code.claude.com/docs/en/hooks), [hooks guide](https://code.claude.com/docs/en/hooks-guide). Documentation is not a substitute for observed live coverage.
 
-The [mods event reference](https://code.claude.com/docs/en/plugins/mods/reference) was also checked read-only: `tool.check` runs before permission prompting, and the documented render sites do not supply a general permission-dialog open/close pair. No mod was installed, and a render callback is not assumed to prove an outstanding human wait.
+The [mods event reference](https://code.claude.com/docs/en/plugins/mods/reference) was also checked: `tool.check` runs before permission prompting, and the documented render sites do not supply a general permission-dialog open/close pair. A render callback is not assumed to prove an outstanding human wait. Watchling's mod uses only `turn.start` and `turn.complete`, to report turns that end without `Stop` ([`state-model.md`](state-model.md#turns-that-end-without-stop)).

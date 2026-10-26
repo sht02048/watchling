@@ -100,9 +100,11 @@ Claude Code ──hook──▶ watchling-hook-emitter ──local socket──�
 
 Watchling adds hooks to `~/.claude/settings.json`. For each event, Claude Code runs a small Swift helper that forwards a few fields to the app over a local Unix socket. Each hook has a one-second timeout and never replies to Claude Code. While the app isn't running, the helper keeps the same fields in `~/Library/Application Support/watchling/pending`, and Watchling picks them up when it starts.
 
+No hook fires when you interrupt a turn with Esc or dismiss a permission prompt, so Watchling also adds a small [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview). It copies the mod to `~/Library/Application Support/watchling/claude-mod` and lists that folder in `CLAUDE_CODE_PLUGIN_DIRS` under `env` in the same settings file. When a turn ends, the mod runs the same helper, so Peep stops working instead of waiting for your next prompt.
+
 ## Privacy
 
-The helper sends event metadata such as session and tool IDs, the event type, tool names, permission mode, the project folder name, and which app runs the session (its bundle ID and, in Orca, the terminal tab handle). While the app is closed, that metadata waits on disk until the next launch. Prompts, tool input and transcripts are never stored, shown or sent. Tool input is reduced to a one-way fingerprint inside the helper so permission requests can be matched to their tool calls. Watchling makes no network requests.
+The helper sends event metadata such as session and tool IDs, the event type, tool names, permission mode, the project folder name, and which app runs the session (its bundle ID and, in Orca, the terminal tab handle). While the app is closed, that metadata waits on disk until the next launch. Prompts, tool input and transcripts are never stored, shown or sent. Tool input is reduced to a one-way fingerprint inside the helper so permission requests can be matched to their tool calls. The mod passes only the session ID and folder when a turn ends. Watchling makes no network requests.
 
 ## FAQ
 
@@ -119,13 +121,13 @@ No. Each hook has a one-second timeout and returns nothing.
 No, by design. Watchling only tells you that a session needs you; you answer in the terminal.
 
 **What exactly does it change in my settings?**
-It adds only its own hook handlers and keeps the rest of `~/.claude/settings.json`. The previous file is backed up to `~/Library/Application Support/watchling/hook-backups`.
+It adds only its own hook handlers and its mod folder to `CLAUDE_CODE_PLUGIN_DIRS`, and keeps the rest of `~/.claude/settings.json`. The previous file is backed up to `~/Library/Application Support/watchling/hook-backups`.
 
 ## Uninstall
 
-Choose **Uninstall Watchling…** in the menu bar menu. Watchling removes its hooks from `~/.claude/settings.json`, stops opening when your Mac starts, moves itself to the Trash and quits. Optionally delete `~/Library/Application Support/watchling` afterwards.
+Choose **Uninstall Watchling…** in the menu bar menu. Watchling removes its hooks and its mod from `~/.claude/settings.json`, stops opening when your Mac starts, moves itself to the Trash and quits. Optionally delete `~/Library/Application Support/watchling` afterwards.
 
-If you trash the app first, Claude Code keeps working; the leftover hooks check for the helper and do nothing. Installing Watchling again picks them up, even if you deleted its data folder.
+If you trash the app first, Claude Code keeps working; the leftover hooks and mod check for the helper and do nothing. Installing Watchling again picks them up, even if you deleted its data folder.
 
 ## Build from source
 

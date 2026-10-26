@@ -300,6 +300,7 @@ final class ProjectionTests: XCTestCase {
     func testRecognizedLifecycleEventsProjectWithoutInventedFields() throws {
         for eventName in [
             "SessionStart", "SessionEnd", "UserPromptSubmit", "Stop", "StopFailure", "PostToolBatch",
+            "TurnEnded",
         ] {
             let event = try XCTUnwrap(project(["hook_event_name": eventName]))
             XCTAssertEqual(event.eventName, eventName)

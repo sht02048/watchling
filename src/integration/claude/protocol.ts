@@ -15,10 +15,13 @@ export const hookEvents = [
   "PostToolBatch",
 ] as const;
 export type HookEventName = (typeof hookEvents)[number];
+// Stop is skipped when the user interrupts a turn, so Watchling's Claude Code mod reports every turn end.
+export const claudeEvents = [...hookEvents, "TurnEnded"] as const;
+export type ClaudeEventName = (typeof claudeEvents)[number];
 
 // Provider metadata only. Receipt order and promptId are not event sequence IDs.
 export interface ClaudeEvent {
-  eventName: HookEventName;
+  eventName: ClaudeEventName;
   sessionId: string;
   project: string;
   promptId?: string;
@@ -117,7 +120,7 @@ export function isClaudeEvent(value: unknown): value is ClaudeEvent {
   if (!isRecord(value) || Object.keys(value).some((key) => !fields.has(key)))
     return false;
   if (
-    !(hookEvents as readonly unknown[]).includes(value.eventName) ||
+    !(claudeEvents as readonly unknown[]).includes(value.eventName) ||
     !isId(value.sessionId) ||
     !isText(value.project, 256)
   )

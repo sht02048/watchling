@@ -162,10 +162,12 @@ private struct DecodedProjection: Decodable {
         "PreToolUse", "PermissionRequest", "PostToolUse", "PostToolUseFailure",
     ]
 
+    // TurnEnded is not a hook: Watchling's Claude Code mod sends it, since Stop is skipped on an interrupt.
     private static let supportedEvents: Set<String> = [
         "SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse",
         "PostToolUse", "PostToolUseFailure", "PermissionRequest", "Notification",
         "SubagentStart", "SubagentStop", "Stop", "StopFailure", "PostToolBatch",
+        "TurnEnded",
     ]
 
     init(from decoder: Decoder) throws {

@@ -7,6 +7,7 @@ import {
   open,
   readdir,
   rename,
+  rm,
   unlink,
   type FileHandle,
 } from "node:fs/promises";
@@ -17,6 +18,14 @@ import { hookEvents, isEpoch, isRecord } from "./protocol.ts";
 
 export const SETTINGS_LIMIT = 1024 * 1024;
 export const MANIFEST_LIMIT = 128 * 1024;
+const PLUGIN_FILE_LIMIT = 64 * 1024;
+// Claude Code loads the Watchling mod from the directories this variable lists.
+export const PLUGIN_VARIABLE = "CLAUDE_CODE_PLUGIN_DIRS";
+export const PLUGIN_FILES = [
+  ".claude-plugin/plugin.json",
+  "hooks/hooks.json",
+  "hooks/register.js",
+];
 const LOCK_MAGIC = Buffer.from("watchling-hook-lock-v1\n");
 // Darwin sys/fcntl.h defines O_EXLOCK as 0x20. Node forwards numeric open flags
 // but does not export this flag; never use it on another platform.
@@ -62,11 +71,19 @@ interface Location {
 interface OwnedLocation extends Location {
   legacy: boolean;
 }
+interface Plugin {
+  // The packaged mod, absent outside a packaged app.
+  source: Map<string, Buffer> | null;
+  listed: boolean;
+  present: boolean;
+  current: boolean;
+}
 interface State {
   settings: Settings;
   manifest: Manifest | null;
   manifestSnapshot: Snapshot | null;
   owned: Map<string, OwnedLocation>;
+  plugin: Plugin;
 }
 export interface HookReport {
   mode: "check" | "preview" | "apply";
@@ -145,7 +162,8 @@ function validateLayout(paths: AppPaths, helperPath: string): string {
     paths.manifestPath !== join(paths.userData, "hooks-installation.json") ||
     paths.lockPath !== join(paths.userData, "hooks-install.lock") ||
     paths.backupDirectory !== join(paths.userData, "hook-backups") ||
-    paths.descriptorPath !== join(paths.userData, "endpoint.json")
+    paths.descriptorPath !== join(paths.userData, "endpoint.json") ||
+    paths.pluginDirectory !== join(paths.userData, "claude-mod")
   )
     refuse("Unsupported hook path layout");
   if (Object.values(paths).includes(helperPath))
@@ -635,7 +653,56 @@ async function inspect(
       helperPath,
       paths.descriptorPath,
     ),
+    plugin: await inspectPlugin(paths, helperPath, settings.value),
   };
+}
+function pluginListed(value: JsonObject, paths: AppPaths): boolean {
+  if (!isRecord(value.env)) return false;
+  const directories = value.env[PLUGIN_VARIABLE];
+  return (
+    typeof directories === "string" &&
+    directories.split(":").includes(paths.pluginDirectory)
+  );
+}
+// The mod is optional, so an unsafe copy reads as missing rather than blocking
+// check or uninstall; installing still refuses to write over it.
+async function readPluginFile(
+  path: string,
+  privateFile: boolean,
+): Promise<Snapshot | null> {
+  try {
+    return await readBounded(path, PLUGIN_FILE_LIMIT, privateFile);
+  } catch (error) {
+    if (error instanceof HookManagementError) return null;
+    throw error;
+  }
+}
+async function inspectPlugin(
+  paths: AppPaths,
+  helperPath: string,
+  value: JsonObject,
+): Promise<Plugin> {
+  const packaged = join(dirname(dirname(helperPath)), "claude-mod");
+  let source: Map<string, Buffer> | null = new Map();
+  for (const name of PLUGIN_FILES) {
+    const snapshot = await readPluginFile(join(packaged, name), false);
+    if (!snapshot) {
+      source = null;
+      break;
+    }
+    source.set(name, snapshot.bytes);
+  }
+  // The variable separates directories with colons.
+  if (paths.pluginDirectory.includes(":")) source = null;
+  const present = (await metadata(paths.pluginDirectory)) !== null;
+  let current = present && source !== null;
+  for (const [name, bytes] of source ?? []) {
+    if (!current) break;
+    current =
+      (await readPluginFile(join(paths.pluginDirectory, name), true))?.hash ===
+      hash(bytes);
+  }
+  return { source, listed: pluginListed(value, paths), present, current };
 }
 async function validateHelper(path: string): Promise<void> {
   const before = await metadata(path);
@@ -963,14 +1030,50 @@ function plan(
           : "add";
     if (action) diff.push({ event: hook.event, matcher: hook.matcher, action });
   }
+  const { plugin } = state;
+  if (operation === "uninstall") {
+    if (plugin.listed)
+      diff.push({ event: "env", matcher: PLUGIN_VARIABLE, action: "remove" });
+    if (plugin.present)
+      diff.push({ event: "plugin", matcher: "", action: "remove" });
+  } else if (plugin.source) {
+    if (!plugin.current)
+      diff.push({
+        event: "plugin",
+        matcher: "",
+        action: plugin.present ? "update" : "add",
+      });
+    if (!plugin.listed)
+      diff.push({ event: "env", matcher: PLUGIN_VARIABLE, action: "add" });
+  }
   return diff;
 }
 function changeSettings(
   state: State,
   manifest: Manifest,
   operation: "install" | "uninstall",
+  paths: AppPaths,
 ): Buffer {
   const value = state.settings.value;
+  if (operation === "install" && state.plugin.source && !state.plugin.listed) {
+    if (!("env" in value)) value.env = {};
+    if (!isRecord(value.env)) refuse("Claude env must be an object");
+    const directories = value.env[PLUGIN_VARIABLE];
+    if (directories !== undefined && typeof directories !== "string")
+      refuse("Claude plugin directories must be a string");
+    value.env[PLUGIN_VARIABLE] = directories
+      ? `${directories}:${paths.pluginDirectory}`
+      : paths.pluginDirectory;
+  } else if (operation === "uninstall" && state.plugin.listed) {
+    const env = value.env as JsonObject;
+    const rest = String(env[PLUGIN_VARIABLE])
+      .split(":")
+      .filter((entry) => entry !== paths.pluginDirectory);
+    if (rest.length) env[PLUGIN_VARIABLE] = rest.join(":");
+    else delete env[PLUGIN_VARIABLE];
+    // Keeping no record of who created env keeps the manifest readable by older builds.
+    if (Object.keys(env).length === 0) delete value.env;
+  }
   if (operation === "install") {
     if (!isRecord(value.hooks)) value.hooks = {};
     const hooks = value.hooks as JsonObject;
@@ -1070,7 +1173,8 @@ async function removeManifest(
         state.manifest,
         state.manifest.helperPath,
         paths.descriptorPath,
-      ).size
+      ).size ||
+      pluginListed(current.value, paths)
     )
       failed("Owned hooks remain");
     const manifest = await readBounded(
@@ -1088,6 +1192,41 @@ async function removeManifest(
   await unlink(paths.manifestPath);
   await syncDirectory(paths.userData);
 }
+function changesSettings(change: HookReport["watchling"]["diff"][number]) {
+  return change.event !== "plugin";
+}
+async function installPlugin(
+  paths: AppPaths,
+  source: Map<string, Buffer>,
+  lock: OwnedLock,
+): Promise<void> {
+  await assertLock(paths, lock);
+  await ensureDirectory(paths.pluginDirectory, true);
+  for (const [name, bytes] of source) {
+    const target = join(paths.pluginDirectory, name);
+    await ensureDirectory(dirname(target), true);
+    if (
+      (await readBounded(target, PLUGIN_FILE_LIMIT, true))?.hash === hash(bytes)
+    )
+      continue;
+    await assertLock(paths, lock);
+    const temp = await temporary(target, bytes);
+    try {
+      await assertLock(paths, lock);
+      await rename(temp, target);
+      await syncDirectory(dirname(target));
+    } finally {
+      await discardTemporary(temp);
+    }
+  }
+}
+// Claude Code also writes type declarations into the directory, so all of it goes.
+async function removePlugin(paths: AppPaths, lock: OwnedLock): Promise<void> {
+  await assertLock(paths, lock);
+  if (!(await directory(paths.pluginDirectory, true))) return;
+  await rm(paths.pluginDirectory, { recursive: true });
+  await syncDirectory(paths.userData);
+}
 function report(
   operation: HookOperation,
   apply: boolean,
@@ -1103,9 +1242,10 @@ function report(
   else if (!state.manifest) status = "not-installed";
   else
     status =
-      state.owned.size === hookEvents.length
+      state.owned.size === hookEvents.length &&
+      (!state.plugin.source || (state.plugin.listed && state.plugin.current))
         ? "installed"
-        : state.owned.size
+        : state.owned.size || state.plugin.listed
           ? "partial"
           : "prepared";
   return {
@@ -1143,7 +1283,8 @@ export async function manageClaudeHooks(
   if (operation === "check")
     return report(operation, false, paths, helperPath, state, diff);
   if (!apply) {
-    if (diff.length) changeSettings(state, manifest, operation);
+    if (diff.some(changesSettings))
+      changeSettings(state, manifest, operation, paths);
     return report(operation, false, paths, helperPath, state, diff);
   }
   if (
@@ -1172,8 +1313,8 @@ export async function manageClaudeHooks(
     const result = report(operation, true, paths, helperPath, state, diff);
     if (operation === "uninstall" && !state.manifest) return result;
     // Build and bound the proposed settings before persisting installation intent.
-    const bytes = diff.length
-      ? changeSettings(state, manifest, operation)
+    const bytes = diff.some(changesSettings)
+      ? changeSettings(state, manifest, operation, paths)
       : null;
     if (
       operation === "install" &&
@@ -1187,10 +1328,14 @@ export async function manageClaudeHooks(
       );
       state.manifest = manifest;
     }
+    // The mod is in place before Claude Code is told to load it, and removed after.
+    if (operation === "install" && state.plugin.source && !state.plugin.current)
+      await installPlugin(paths, state.plugin.source, lock);
     const written = bytes
       ? await replaceSettings(paths, home, state.settings.snapshot, bytes, lock)
       : state.settings.snapshot;
     if (operation === "uninstall") {
+      if (state.plugin.present) await removePlugin(paths, lock);
       await removeManifest(paths, home, state, written, lock);
       result.watchling.status = "not-installed";
     } else result.watchling.status = "installed";

@@ -23,6 +23,8 @@ import { runHookCommand } from "../../src/main/hook-command.ts";
 import {
   HookManagementError,
   MANIFEST_LIMIT,
+  PLUGIN_FILES,
+  PLUGIN_VARIABLE,
   SETTINGS_LIMIT,
   manageClaudeHooks,
   quoteHookArgument,
@@ -1701,5 +1703,221 @@ test("the installed command exits quietly when the helper is gone and runs it ot
     assert.equal(missing.status, 0);
     assert.equal(missing.stdout, "");
     assert.equal(missing.stderr, "");
+  });
+});
+
+const modFiles = PLUGIN_FILES;
+// The packaged mod sits beside the helpers directory, as in the app's Resources.
+async function packagedMod(f: Fixture, helper = f.helper): Promise<string> {
+  const root = join(dirname(dirname(helper)), "claude-mod");
+  for (const name of modFiles) {
+    await mkdir(dirname(join(root, name)), { recursive: true, mode: 0o700 });
+    await writeFile(
+      join(root, name),
+      await readFile(
+        new URL(`../../resources/claude-mod/${name}`, import.meta.url),
+      ),
+      { mode: 0o644 },
+    );
+  }
+  return root;
+}
+
+test("the packaged mod is copied privately, listed for Claude Code, and removed", async () => {
+  await fixture(async (f) => {
+    const source = await packagedMod(f);
+    const original = { theme: "kept", env: { FOO: "bar" } };
+    await settings(f, original);
+    const preview = await manageClaudeHooks(
+      "install",
+      false,
+      f.paths,
+      f.helper,
+    );
+    assert.deepEqual(preview.watchling.diff.slice(hookEvents.length), [
+      { event: "plugin", matcher: "", action: "add" },
+      { event: "env", matcher: PLUGIN_VARIABLE, action: "add" },
+    ]);
+    const result = await manageClaudeHooks("install", true, f.paths, f.helper);
+    assert.equal(result.watchling.status, "installed");
+    const installed = await json(f.paths.settingsPath);
+    assert.deepEqual(installed.env, {
+      FOO: "bar",
+      [PLUGIN_VARIABLE]: f.paths.pluginDirectory,
+    });
+    assert.equal((await json(f.paths.manifestPath)).version, 1);
+    assert.equal((await lstat(f.paths.pluginDirectory)).mode & 0o7777, 0o700);
+    for (const name of modFiles) {
+      const copy = join(f.paths.pluginDirectory, name);
+      assert.deepEqual(
+        await readFile(copy),
+        await readFile(join(source, name)),
+      );
+      assert.equal((await lstat(copy)).mode & 0o7777, 0o600);
+      assert.equal((await lstat(dirname(copy))).mode & 0o7777, 0o700);
+    }
+    // Claude Code writes type declarations beside a mod it loads.
+    await mkdir(join(f.paths.pluginDirectory, ".claude-plugin", "types"));
+    await writeFile(join(f.paths.pluginDirectory, "tsconfig.json"), "{}");
+    assert.equal(
+      (await manageClaudeHooks("check", false, f.paths, f.helper)).watchling
+        .status,
+      "installed",
+    );
+    const before = await tree(f.home);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    assert.deepEqual(await tree(f.home), before);
+    const uninstall = await manageClaudeHooks(
+      "uninstall",
+      true,
+      f.paths,
+      f.helper,
+    );
+    assert.deepEqual(uninstall.watchling.diff.slice(hookEvents.length), [
+      { event: "env", matcher: PLUGIN_VARIABLE, action: "remove" },
+      { event: "plugin", matcher: "", action: "remove" },
+    ]);
+    assert.deepEqual(await json(f.paths.settingsPath), original);
+    await assert.rejects(lstat(f.paths.pluginDirectory), { code: "ENOENT" });
+    await assert.rejects(lstat(f.paths.manifestPath), { code: "ENOENT" });
+  });
+});
+
+test("other plugin directories and a missing env survive install and uninstall", async () => {
+  await fixture(async (f) => {
+    await packagedMod(f);
+    const others = { env: { [PLUGIN_VARIABLE]: "/Users/fixture/mods/other" } };
+    await settings(f, others);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    assert.deepEqual((await json(f.paths.settingsPath)).env, {
+      [PLUGIN_VARIABLE]: `/Users/fixture/mods/other:${f.paths.pluginDirectory}`,
+    });
+    await manageClaudeHooks("uninstall", true, f.paths, f.helper);
+    assert.deepEqual(await json(f.paths.settingsPath), others);
+    await settings(f, { theme: "kept" });
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    assert.deepEqual((await json(f.paths.settingsPath)).env, {
+      [PLUGIN_VARIABLE]: f.paths.pluginDirectory,
+    });
+    await manageClaudeHooks("uninstall", true, f.paths, f.helper);
+    assert.deepEqual(await json(f.paths.settingsPath), { theme: "kept" });
+  });
+});
+
+test("an updated packaged mod refreshes the copy without rewriting settings", async () => {
+  await fixture(async (f) => {
+    const source = await packagedMod(f);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const settingsBefore = await tree(f.paths.settingsPath);
+    await writeFile(
+      join(source, "hooks/register.js"),
+      "export function register() {}\n",
+    );
+    const check = await manageClaudeHooks("check", false, f.paths, f.helper);
+    assert.equal(check.watchling.status, "partial");
+    assert.deepEqual(check.watchling.diff, [
+      { event: "plugin", matcher: "", action: "update" },
+    ]);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    assert.deepEqual(await tree(f.paths.settingsPath), settingsBefore);
+    assert.equal(
+      await readFile(
+        join(f.paths.pluginDirectory, "hooks/register.js"),
+        "utf8",
+      ),
+      "export function register() {}\n",
+    );
+  });
+});
+
+test("an installation from before the mod gains it and keeps its manifest", async () => {
+  await fixture(async (f) => {
+    await settings(f, { theme: "kept" });
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const manifest = await readFile(f.paths.manifestPath);
+    await packagedMod(f);
+    const result = await manageClaudeHooks("install", true, f.paths, f.helper);
+    assert.deepEqual(
+      result.watchling.diff.map((change) => change.event),
+      ["plugin", "env"],
+    );
+    // Builds from before the mod read the same manifest.
+    assert.deepEqual(await readFile(f.paths.manifestPath), manifest);
+    await manageClaudeHooks("uninstall", true, f.paths, f.helper);
+    assert.deepEqual(await json(f.paths.settingsPath), { theme: "kept" });
+  });
+});
+
+test("a malformed env refuses only an install that has to change it", async () => {
+  await fixture(async (f) => {
+    for (const env of [[], { [PLUGIN_VARIABLE]: 1 }]) {
+      await settings(f, { env });
+      await manageClaudeHooks("check", false, f.paths, f.helper);
+      await manageClaudeHooks("install", true, f.paths, f.helper);
+      await manageClaudeHooks("uninstall", true, f.paths, f.helper);
+      await packagedMod(f);
+      const before = await tree(f.home);
+      await refused(manageClaudeHooks("install", true, f.paths, f.helper));
+      assert.deepEqual(await tree(f.home), before);
+      await assert.doesNotReject(
+        manageClaudeHooks("check", false, f.paths, f.helper),
+      );
+      await rm(join(f.home, "claude-mod"), { recursive: true });
+    }
+  });
+});
+
+test("an unsafe copy of the mod never blocks check or uninstall", async () => {
+  await fixture(async (f) => {
+    await packagedMod(f);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const copy = join(f.paths.pluginDirectory, "hooks/register.js");
+    await chmod(copy, 0o644);
+    assert.equal(
+      (await manageClaudeHooks("check", false, f.paths, f.helper)).watchling
+        .status,
+      "partial",
+    );
+    await manageClaudeHooks("uninstall", true, f.paths, f.helper);
+    await assert.rejects(lstat(f.paths.pluginDirectory), { code: "ENOENT" });
+  });
+});
+
+test("the installer copies every file the mod ships", async () => {
+  const root = new URL("../../resources/claude-mod/", import.meta.url);
+  const shipped = (
+    await readdir(root, { recursive: true, withFileTypes: true })
+  )
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      join(entry.parentPath, entry.name).slice(root.pathname.length),
+    )
+    .filter(
+      (name) =>
+        !name.startsWith(".claude-plugin/types/") && name !== "tsconfig.json",
+    )
+    .sort();
+  assert.deepEqual(shipped, [...PLUGIN_FILES].sort());
+});
+
+test("relocation moves the hooks and keeps the mod listed once", async () => {
+  await fixture(async (f) => {
+    await packagedMod(f);
+    await manageClaudeHooks("install", true, f.paths, f.helper);
+    const moved = join(
+      f.home,
+      "Moved",
+      "Resources",
+      "helpers",
+      "watchling-hook-emitter",
+    );
+    await mkdir(dirname(moved), { recursive: true, mode: 0o700 });
+    await writeFile(moved, "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+    await packagedMod(f, moved);
+    const result = await relocateClaudeHooks(f.paths, moved);
+    assert.equal(result?.watchling.status, "installed");
+    assert.deepEqual((await json(f.paths.settingsPath)).env, {
+      [PLUGIN_VARIABLE]: f.paths.pluginDirectory,
+    });
   });
 });

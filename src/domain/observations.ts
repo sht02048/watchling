@@ -21,6 +21,7 @@ interface Ask {
   tool?: string;
   question: boolean;
   order: number;
+  agentId?: string;
 }
 
 const terminalNames: Record<string, string> = {
@@ -75,6 +76,23 @@ function clearAsks(session: Session): void {
   session.idAsks.clear();
   session.fingerprintAsks.clear();
   session.unkeyedAsk = null;
+}
+
+// Background agents keep running after the main turn ends, so their asks may
+// still be waiting; foreground agents end with the turn.
+function endMainTurn(session: Session): void {
+  const keep = (ask: Ask): boolean =>
+    ask.agentId !== undefined &&
+    (session.background.has(ask.agentId) || session.workflow.has(ask.agentId));
+  for (const [id, ask] of session.idAsks)
+    if (!keep(ask)) session.idAsks.delete(id);
+  for (const [fingerprint, ask] of session.fingerprintAsks)
+    if (!keep(ask)) session.fingerprintAsks.delete(fingerprint);
+  if (session.unkeyedAsk && !keep(session.unkeyedAsk))
+    session.unkeyedAsk = null;
+  session.pending.clear();
+  session.activeTool = null;
+  session.base = "idle";
 }
 
 function addAsk(
@@ -261,6 +279,7 @@ export class Observations {
       ...(event.toolName ? { tool: event.toolName } : {}),
       question: event.toolName === "AskUserQuestion",
       order: ++this.askOrder,
+      ...(event.agentId ? { agentId: event.agentId } : {}),
     });
     const endTool = (toolUseId: string | undefined): void => {
       if (toolUseId && session.activeTool?.id === toolUseId)
@@ -317,10 +336,12 @@ export class Observations {
       case "PostToolUse":
       case "PostToolUseFailure":
         endTool(event.toolUseId);
-        if (event.eventName === "PostToolUseFailure" && event.isInterrupt) {
-          clearAsks(session);
-          session.pending.clear();
-          session.base = "idle";
+        if (
+          event.eventName === "PostToolUseFailure" &&
+          event.isInterrupt &&
+          !event.agentId
+        ) {
+          endMainTurn(session);
           break;
         }
         if (event.toolUseId) session.pending.delete(event.toolUseId);
@@ -374,6 +395,9 @@ export class Observations {
         clearAsks(session);
         session.pending.clear();
         session.activeTool = null;
+        break;
+      case "TurnEnded":
+        if (!event.agentId) endMainTurn(session);
         break;
       default:
         break;

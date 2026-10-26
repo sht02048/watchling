@@ -36,6 +36,7 @@ Releases normally come from `.github/workflows/release.yml`: set `version` in `p
 - `src/playground/` — design labs; their saved JSON configs feed the real renderer.
 - `site/` — the landing page: React and CSS Modules on Vite, deployed on Vercel (`site/vercel.json`). It imports the pet renderer from `src/` through the `@watchling/` alias. `pnpm site:dev` serves it; its tunable values live in `site/src/config/config.json`.
 - `native/hook-emitter/` — Swift helper that Claude Code runs for each hook event.
+- `resources/claude-mod/` — Claude Code mod that reports each main turn end through the same helper, since `Stop` is skipped on an interrupt. Packaged into the app's Resources; the installer copies it to the data folder and lists it in `env.CLAUDE_CODE_PLUGIN_DIRS`. `claude plugin validate resources/claude-mod` checks it.
 - `docs/` — design decisions: `state-model.md`, `session-list.md`, `claude-coverage.md`, `landing-page.md`.
 
 ## Rules

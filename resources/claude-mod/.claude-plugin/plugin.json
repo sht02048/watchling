@@ -1,0 +1,11 @@
+{
+  "name": "watchling",
+  "version": "1.0.0",
+  "description": "Tells Watchling when you interrupt a Claude Code turn, which no hook reports",
+  "author": {
+    "name": "Watchling",
+    "url": "https://github.com/sht02048/watchling"
+  },
+  "homepage": "https://github.com/sht02048/watchling",
+  "license": "MIT"
+}

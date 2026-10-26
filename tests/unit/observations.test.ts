@@ -254,6 +254,94 @@ test("an Esc interrupt ends the turn as done", () => {
   assert.equal(stateOf(observations), "idle");
 });
 
+test("a turn end from the mod ends work and the main turn's asks", () => {
+  const observations = new Observations();
+  feed(observations, event("UserPromptSubmit"));
+  feed(observations, event("TurnEnded", { agentId: "agent-1" }));
+  assert.equal(stateOf(observations), "working");
+  feed(observations, event("TurnEnded"));
+  assert.equal(stateOf(observations), "idle");
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PreToolUse", { toolName: "Bash", toolUseId: "t1" }),
+    event("PermissionRequest", { toolName: "Bash", toolUseId: "t1" }),
+    event("PreToolUse", { toolName: "AskUserQuestion", toolUseId: "t2" }),
+    event("Notification", { notificationType: "permission_prompt" }),
+    event("TurnEnded"),
+  );
+  assert.equal(stateOf(observations), "idle");
+  assert.equal(observations.snapshot().sessions[0]?.detail, null);
+});
+
+test("a turn end from the mod keeps asks from background agents", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PostToolUse", {
+      toolName: "Agent",
+      toolUseId: "launch",
+      childAgentId: "agent-1",
+      childStatus: "async_launched",
+    }),
+    event("PermissionRequest", {
+      toolName: "Bash",
+      agentId: "agent-1",
+      inputFingerprint: fpA,
+    }),
+    event("PermissionRequest", { toolName: "Read", toolUseId: "t1" }),
+    event("TurnEnded"),
+  );
+  assert.equal(stateOf(observations), "asking");
+  assert.deepEqual(observations.snapshot().sessions[0]?.detail, {
+    kind: "permission",
+    tool: "Bash",
+  });
+  feed(
+    observations,
+    event("PostToolUse", {
+      toolName: "Bash",
+      toolUseId: "t9",
+      agentId: "agent-1",
+      inputFingerprint: fpA,
+    }),
+  );
+  assert.equal(stateOf(observations), "subagents");
+});
+
+test("a turn end drops asks from foreground agents, which end with the turn", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PermissionRequest", {
+      toolName: "Bash",
+      agentId: "foreground",
+      toolUseId: "t1",
+    }),
+  );
+  assert.equal(stateOf(observations), "asking");
+  feed(observations, event("TurnEnded"));
+  assert.equal(stateOf(observations), "idle");
+});
+
+test("an interrupted subagent tool leaves the main turn running", () => {
+  const observations = new Observations();
+  feed(
+    observations,
+    event("UserPromptSubmit"),
+    event("PermissionRequest", { toolName: "Read", toolUseId: "main" }),
+    event("PostToolUseFailure", {
+      toolName: "Bash",
+      toolUseId: "t1",
+      agentId: "agent-1",
+      isInterrupt: true,
+    }),
+  );
+  assert.equal(stateOf(observations), "asking");
+});
+
 test("a denial without a post event keeps asking until the next prompt", () => {
   const observations = new Observations();
   feed(
@@ -1287,6 +1375,8 @@ test("an interrupt or a failed stop keeps the last task count, and SessionEnd dr
       isInterrupt: true,
     }),
   );
+  assert.equal(observations.snapshot().state, "waiting");
+  feed(observations, event("UserPromptSubmit"), event("TurnEnded"));
   assert.equal(observations.snapshot().state, "waiting");
   feed(observations, event("UserPromptSubmit"), event("StopFailure"));
   assert.equal(observations.snapshot().state, "waiting");

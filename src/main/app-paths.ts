@@ -11,6 +11,7 @@ export function resolveAppPaths(home = homedir()) {
     lockPath: join(userData, "hooks-install.lock"),
     backupDirectory: join(userData, "hook-backups"),
     descriptorPath: join(userData, "endpoint.json"),
+    pluginDirectory: join(userData, "claude-mod"),
   };
 }
 export type AppPaths = ReturnType<typeof resolveAppPaths>;

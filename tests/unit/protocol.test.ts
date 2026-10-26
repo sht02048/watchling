@@ -285,3 +285,13 @@ test("terminal locations are bounded identifiers", () => {
   ])
     assert.equal(isClaudeEvent({ ...located, orcaTerminal }), false);
 });
+test("a turn end from the Claude Code mod is a known event, unlike other names", () => {
+  const ended = {
+    eventName: "TurnEnded",
+    sessionId: "session-1",
+    project: "fixture",
+  };
+  assert.equal(isClaudeEvent(ended), true);
+  for (const eventName of ["turn.complete", "TurnInterrupted", "turnended"])
+    assert.equal(isClaudeEvent({ ...ended, eventName }), false);
+});

@@ -8,6 +8,9 @@ build/
 native/hook-emitter/.build/
 native/hook-emitter/.swiftpm/
 .omc/
+# Claude Code writes these into a mod it loads with --plugin-dir.
+resources/claude-mod/.claude-plugin/types/
+resources/claude-mod/tsconfig.json
 
 .DS_Store
 llm-wiki/

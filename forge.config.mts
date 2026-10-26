@@ -48,7 +48,10 @@ const config: ForgeConfig = {
     icon: "resources/icon",
     asar: true,
     extendInfo: { LSUIElement: true },
-    extraResource: [join(helperStage, "helpers")],
+    extraResource: [
+      join(helperStage, "helpers"),
+      join(helperStage, "claude-mod"),
+    ],
     ...(notarize
       ? {
           osxSign: {
@@ -98,6 +101,14 @@ const config: ForgeConfig = {
       const helper = join(helperStage, "helpers", helperName);
       await cp(join(bin, helperName), helper);
       await chmod(helper, 0o755);
+      const mod = join(helperStage, "claude-mod");
+      await cp("resources/claude-mod", mod, { recursive: true });
+      // Claude Code writes these when a developer loads the mod with --plugin-dir.
+      await rm(join(mod, ".claude-plugin", "types"), {
+        recursive: true,
+        force: true,
+      });
+      await rm(join(mod, "tsconfig.json"), { force: true });
     },
     postPackage: async (_config, { outputPaths }) => {
       for (const output of outputPaths) {
