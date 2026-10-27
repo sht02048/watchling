@@ -56,7 +56,7 @@ Requires macOS 13 or later on Apple silicon.
 | Mint, a dot circling    | Claude waits on a background task                |
 | Grey                    | Watchling missed some signals and can't tell     |
 
-With several sessions open, Peep shows the most urgent one: purple, then grey, orange, blue, mint and coral. Mint also covers a dev server left running in the background, so after ten minutes it dozes off and dims like coral does after three. See [docs/state-model.md](docs/state-model.md) for the full rules.
+With several sessions open, Peep shows the most urgent one: purple, then grey, orange, blue, mint and coral. Mint also covers a dev server left running in the background, and Peep stays awake and bright for as long as it runs. See [docs/state-model.md](docs/state-model.md) for the full rules.
 
 ### Session list
 

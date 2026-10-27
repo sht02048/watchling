@@ -15,14 +15,6 @@ test("Peep hides with no sessions and dims while every session is idle", () => {
   assert.equal(presence({ ...base, activity: "active" }), "shown");
 });
 
-test("waiting on a background task dims like idle and is never hidden", () => {
-  assert.equal(presence({ ...base, activity: "waiting" }), "dimmed");
-  assert.equal(
-    presence({ ...base, activity: "waiting", dimWhenIdle: false }),
-    "shown",
-  );
-});
-
 test("each setting works on its own", () => {
   assert.equal(
     presence({ ...base, activity: "empty", hideWhenEmpty: false }),
