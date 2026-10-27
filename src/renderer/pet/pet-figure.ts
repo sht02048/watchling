@@ -90,12 +90,8 @@ const SLEEP: Pose = {
 };
 // The app dims an idle Peep 30 seconds after it falls asleep.
 const SLEEP_DELAY = 180;
-const WAITING_SLEEP_DELAY = 600;
 const ORBIT_SPEED = 1.5;
 const TYPING_RATE = 9;
-// Waiting on a background task naps like idle, so a dev server left running does not keep Peep up.
-const resting = (state: SemanticState): boolean =>
-  state === "idle" || state === "waiting";
 const POSES: Record<SemanticState, Pose> = {
   idle: IDLE,
   waiting: { ...IDLE, speed: 0.5, wave: 0.05, field: 0.55 },
@@ -608,8 +604,7 @@ export function createPet(
     figure.t += dt;
     figure.phase += params.speed.v * dt;
     figure.rotPhase += params.rot.v * dt;
-    const delay = shown === "waiting" ? WAITING_SLEEP_DELAY : SLEEP_DELAY;
-    if (resting(shown) && !asleep && figure.t - idleSince >= delay) {
+    if (shown === "idle" && !asleep && figure.t - idleSince >= SLEEP_DELAY) {
       asleep = true;
       sleep.target = 1;
       for (const key of POSE_KEYS) params[key].target = SLEEP[key];
@@ -633,8 +628,8 @@ export function createPet(
         params.field.vel += 1.5;
       }
       if (state === "asking" && shown !== "asking") askedAt = figure.t;
-      if (resting(state) && !resting(shown)) idleSince = figure.t;
-      if (!resting(state)) {
+      if (state === "idle" && shown !== "idle") idleSince = figure.t;
+      if (state !== "idle") {
         asleep = false;
         sleep.target = 0;
       }
