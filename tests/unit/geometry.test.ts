@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clampWindow, expand, listPosition } from "../../src/main/geometry.ts";
+import {
+  clampWindow,
+  contains,
+  expand,
+  listPosition,
+} from "../../src/main/geometry.ts";
 import { isPoint } from "../../src/shared/ui-contract.ts";
 
 test("rejects malformed coordinates without coercion", () => {
@@ -69,4 +74,12 @@ test("pets may overhang display edges by their transparent margin", () => {
     clampWindow({ x: -5000, y: -5000 }, area, { width: 180, height: 180 }),
     { x: -30, y: -30 },
   );
+});
+
+test("bounds contain their edges and nothing past them", () => {
+  const area = { x: -100, y: 20, width: 50, height: 30 };
+  assert.equal(contains(area, { x: -100, y: 20 }), true);
+  assert.equal(contains(area, { x: -50, y: 50 }), true);
+  assert.equal(contains(area, { x: -101, y: 30 }), false);
+  assert.equal(contains(area, { x: -75, y: 51 }), false);
 });

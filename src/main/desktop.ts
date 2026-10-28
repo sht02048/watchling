@@ -29,7 +29,7 @@ import {
 } from "../integration/claude/collector.ts";
 import { attachIpc } from "./ipc.ts";
 import { focusTerminal } from "./terminal-focus.ts";
-import { clampWindow, expand, listPosition } from "./geometry.ts";
+import { clampWindow, contains, expand, listPosition } from "./geometry.ts";
 import { PositionStore } from "./position-store.ts";
 import {
   petSizes,
@@ -79,6 +79,7 @@ const viewUrls = {
 const baseSize = 180;
 let size = { width: baseSize, height: baseSize };
 const listSize = { width: 320, height: 280 };
+const LIST_LEAVE_MS = 1000;
 // Transparent margin around the body that may sit past the display edge.
 let petInset = 30;
 const csp = contentSecurityPolicy("'none'");
@@ -116,6 +117,8 @@ let dragging:
   | undefined;
 let hit = false;
 let listHiddenAt = 0;
+let listLeftAt: number | undefined;
+let sessionMenuOpen = false;
 let pressClosedList = false;
 let ignoring = true;
 const observations = new Observations();
@@ -394,8 +397,18 @@ function showList(): void {
   const area = screen.getDisplayMatching(petBounds).workArea;
   const position = listPosition(petBounds, area, listSize);
   list.setBounds({ ...position, ...listSize });
-  list.show();
-  list.focus();
+  listLeftAt = undefined;
+  list.showInactive();
+}
+
+function closeListAfterLeave(cursor: Point): void {
+  if (!pet || !list?.isVisible() || sessionMenuOpen) return;
+  if (contains(list.getBounds(), cursor) || contains(pet.getBounds(), cursor)) {
+    listLeftAt = undefined;
+    return;
+  }
+  listLeftAt ??= performance.now();
+  if (performance.now() - listLeftAt >= LIST_LEAVE_MS) hideList();
 }
 
 function showPet(): void {
@@ -635,6 +648,8 @@ async function start(options: DesktopOptions): Promise<void> {
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
+    // A focused list makes macOS leave a full-screen Space, so it closes when the cursor leaves instead of on blur.
+    focusable: false,
     skipTaskbar: true,
     title: "Watchling sessions",
     backgroundColor: "#faf8f3",
@@ -643,7 +658,6 @@ async function start(options: DesktopOptions): Promise<void> {
   configureWindow(pet);
   configureWindow(list);
   pet.setIgnoreMouseEvents(true, { forward: true });
-  list.on("blur", hideList);
   detachIpc = attachIpc({
     pet,
     list,
@@ -660,13 +674,7 @@ async function start(options: DesktopOptions): Promise<void> {
         !!list?.isVisible() || performance.now() - listHiddenAt < 300;
       if (!pet?.isVisible() || !hit || dragging) return;
       const bounds = pet.getBounds();
-      if (
-        cursor.x < bounds.x ||
-        cursor.x > bounds.x + bounds.width ||
-        cursor.y < bounds.y ||
-        cursor.y > bounds.y + bounds.height
-      )
-        return;
+      if (!contains(bounds, cursor)) return;
       dragging = { cursor, origin: { x: bounds.x, y: bounds.y }, moved: false };
       dragTimer = setInterval(
         () => updateDrag(screen.getCursorScreenPoint()),
@@ -693,6 +701,7 @@ async function start(options: DesktopOptions): Promise<void> {
     menu: (id) => {
       const session = snapshot.sessions.find((item) => item.id === id);
       if (!session || !list) return;
+      sessionMenuOpen = true;
       Menu.buildFromTemplate([
         ...(session.focusable
           ? [
@@ -714,7 +723,12 @@ async function start(options: DesktopOptions): Promise<void> {
             queueSnapshot();
           },
         },
-      ]).popup({ window: list });
+      ]).popup({
+        window: list,
+        callback: () => {
+          sessionMenuOpen = false;
+        },
+      });
     },
   });
   pet.webContents.on("render-process-gone", () => {
@@ -810,6 +824,7 @@ async function start(options: DesktopOptions): Promise<void> {
       if (!pet?.isVisible() || pet.webContents.isDestroyed()) return;
       const cursor = screen.getCursorScreenPoint();
       updateDrag(cursor);
+      closeListAfterLeave(cursor);
       const bounds = pet.getBounds();
       pet.webContents.send("watchling:cursor", {
         x: cursor.x - bounds.x,
