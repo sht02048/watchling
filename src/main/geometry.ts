@@ -26,6 +26,15 @@ export function clampWindow(
   };
 }
 
+export function contains(area: Bounds, point: Point): boolean {
+  return (
+    point.x >= area.x &&
+    point.x <= area.x + area.width &&
+    point.y >= area.y &&
+    point.y <= area.y + area.height
+  );
+}
+
 export function expand(area: Bounds, inset: number): Bounds {
   return {
     x: area.x - inset,

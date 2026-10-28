@@ -64,11 +64,11 @@ With several sessions open, Peep shows the most urgent one: purple, then grey, o
   <img src="docs/assets/session-list.png" width="320" alt="The session list: api-server waits for approval of Bash and is highlighted in purple, web-app and a docs-site session are working, and every line that can jump to its terminal ends in a chevron except infra, which runs without a GUI app">
 </p>
 
-Click Peep to open the list, and click again or press <kbd>Esc</kbd> to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Right-click a line for a menu that also copies its session ID, or press <kbd>⌘C</kbd> on it.
+Click Peep to open the list. Click Peep again, or move the pointer off the list for a second, to close it. Sessions are grouped by project. Each line shows what the session is doing and how long it has been in that state. Right-click a line for a menu that also copies its session ID.
 
 ### Jump to a session
 
-When Peep turns purple, open the list and click the waiting session. Watchling brings the app that runs it to the front, so you can answer without hunting through windows. Lines you can jump from end in ›, and <kbd>↑</kbd> <kbd>↓</kbd> then <kbd>Return</kbd> work too.
+When Peep turns purple, open the list and click the waiting session. Watchling brings the app that runs it to the front, so you can answer without hunting through windows. Lines you can jump from end in ›.
 
 | Where the session runs                               | What a click does             |
 | ---------------------------------------------------- | ----------------------------- |
